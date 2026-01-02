@@ -16,6 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Button, EmptyState, Toast } from '@/components/ui';
 import { useApp } from '@/context/AppContext';
 import { getRecipeById } from '@/data/recipes';
+import { stores } from '@/data/stores';
 import { Colors, Spacing, BorderRadius, CategoryIcons } from '@/constants/theme';
 
 export default function ShopScreen() {
@@ -35,7 +36,7 @@ export default function ShopScreen() {
   const handleClearMenu = () => {
     clearMenu();
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setToast({ message: 'Menu cleared', type: 'info' });
+    setToast({ message: 'Basket cleared', type: 'info' });
     setTimeout(() => setToast(null), 2000);
   };
 
@@ -51,7 +52,7 @@ export default function ShopScreen() {
       return acc;
     }, {} as Record<string, typeof state.groceryList>);
 
-    let text = '🛒 MealSwipe Shopping List\n\n';
+    let text = '🛒 MealSwipe Basket\n\n';
     Object.entries(grouped).forEach(([category, items]) => {
       text += `━━━ ${category} ━━━\n`;
       items.forEach(item => {
@@ -61,7 +62,7 @@ export default function ShopScreen() {
     });
 
     const total = state.groceryList.reduce((sum, item) => sum + item.estimatedPrice, 0);
-    text += `Total: £${total.toFixed(2)}`;
+    text += `Estimated total: £${total.toFixed(2)}`;
 
     await Clipboard.setStringAsync(text);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -69,8 +70,10 @@ export default function ShopScreen() {
     setTimeout(() => setToast(null), 2000);
   };
 
-  const handleShopTesco = () => {
-    Linking.openURL('https://www.tesco.com/groceries/');
+  const preferredStore = stores.find(store => store.id === state.preferences.preferredStoreId) ?? stores[0];
+
+  const handleShopStore = () => {
+    Linking.openURL(preferredStore.searchUrlTemplate);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
 
@@ -78,11 +81,11 @@ export default function ShopScreen() {
   if (state.menu.length === 0) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
-        <Text style={styles.title}>This Week's Menu</Text>
+        <Text style={styles.title}>This Week's Basket</Text>
         <EmptyState
           icon="restaurant-outline"
-          title="Your menu is empty"
-          subtitle="Swipe through recipes and tap + to add them here"
+          title="Your basket is empty"
+          subtitle="Swipe through recipes and tap + to add them to your basket"
         />
         {toast && <Toast message={toast.message} type={toast.type} visible={true} />}
       </View>
@@ -97,12 +100,27 @@ export default function ShopScreen() {
   }, {} as Record<string, typeof state.groceryList>);
 
   const groceryTotal = state.groceryList.reduce((sum, item) => sum + item.estimatedPrice, 0);
+  const packOptimizedTotal = state.groceryList.reduce(
+    (sum, item) => sum + (item.packCost ?? item.estimatedPrice),
+    0
+  );
+  const packOptimizationDelta = packOptimizedTotal - groceryTotal;
   const checkedCount = state.groceryList.filter(item => item.isChecked).length;
-  const sharedCount = state.groceryList.filter(item => item.isShared).length;
+  const overlapSavings = state.groceryList.reduce(
+    (sum, item) => sum + (item.isShared ? item.estimatedPrice * 0.1 : 0),
+    0
+  );
+
+  const storePriceModifiers: Record<string, number> = {
+    tesco: 1,
+    sainsburys: 1.03,
+    asda: 0.97,
+    waitrose: 1.08,
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <Text style={styles.title}>This Week's Menu</Text>
+      <Text style={styles.title}>This Week's Basket</Text>
 
       <ScrollView
         style={styles.scrollView}
@@ -113,7 +131,7 @@ export default function ShopScreen() {
         <View style={styles.summaryCard}>
           <View style={styles.summaryRow}>
             <View>
-              <Text style={styles.summaryLabel}>Estimated Cost</Text>
+              <Text style={styles.summaryLabel}>Basket estimate</Text>
               <Text style={styles.summaryValue}>
                 £{menuTotal.min.toFixed(2)} - £{menuTotal.max.toFixed(2)}
               </Text>
@@ -201,17 +219,17 @@ export default function ShopScreen() {
           );
         })}
 
-        {/* Generate Grocery List Button */}
+        {/* Build Basket Button */}
         <Button
-          title="Generate Grocery List"
+          title="Build Basket"
           icon="cart"
           onPress={handleGenerateList}
           style={{ marginTop: Spacing.lg }}
         />
 
-        {/* Clear Menu Button */}
+        {/* Clear Basket Button */}
         <Button
-          title="Clear Menu"
+          title="Clear Basket"
           icon="trash-outline"
           variant="danger"
           onPress={handleClearMenu}
@@ -219,7 +237,7 @@ export default function ShopScreen() {
         />
       </ScrollView>
 
-      {/* Grocery List Modal */}
+      {/* Basket Modal */}
       <Modal
         visible={showGroceryList}
         animationType="slide"
@@ -231,7 +249,7 @@ export default function ShopScreen() {
             <TouchableOpacity onPress={() => setShowGroceryList(false)}>
               <Ionicons name="close" size={24} color={Colors.text} />
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Grocery List</Text>
+            <Text style={styles.modalTitle}>Basket</Text>
             <TouchableOpacity onPress={handleCopyList}>
               <Ionicons name="copy-outline" size={22} color={Colors.primary} />
             </TouchableOpacity>
@@ -242,23 +260,29 @@ export default function ShopScreen() {
             colors={[Colors.tescoBlue, '#003d73']}
             style={styles.grocerySummary}
           >
-            <Text style={styles.grocerySummaryLabel}>Estimated Total</Text>
+            <Text style={styles.grocerySummaryLabel}>Estimated Basket Total</Text>
             <Text style={styles.grocerySummaryValue}>
               £{(groceryTotal * 0.95).toFixed(2)} - £{(groceryTotal * 1.05).toFixed(2)}
             </Text>
             <View style={styles.groceryStatsRow}>
               <View style={styles.groceryStat}>
                 <Text style={styles.groceryStatValue}>{state.groceryList.length}</Text>
-                <Text style={styles.groceryStatLabel}>Items</Text>
+                <Text style={styles.groceryStatLabel}>Ingredients</Text>
               </View>
               <View style={styles.groceryStat}>
                 <Text style={styles.groceryStatValue}>{checkedCount}</Text>
-                <Text style={styles.groceryStatLabel}>Collected</Text>
+                <Text style={styles.groceryStatLabel}>In basket</Text>
               </View>
               <View style={styles.groceryStat}>
-                <Text style={styles.groceryStatValue}>{sharedCount}</Text>
-                <Text style={styles.groceryStatLabel}>Shared</Text>
+                <Text style={styles.groceryStatValue}>£{overlapSavings.toFixed(2)}</Text>
+                <Text style={styles.groceryStatLabel}>Overlap savings</Text>
               </View>
+            </View>
+            <View style={styles.grocerySummaryRow}>
+              <Text style={styles.grocerySummaryRowLabel}>Pack size optimization</Text>
+              <Text style={styles.grocerySummaryRowValue}>
+                {packOptimizationDelta >= 0 ? '+' : '-'}£{Math.abs(packOptimizationDelta).toFixed(2)}
+              </Text>
             </View>
             {/* Progress bar */}
             <View style={styles.progressBar}>
@@ -271,7 +295,36 @@ export default function ShopScreen() {
             </View>
           </LinearGradient>
 
-          {/* Grocery Items */}
+          <View style={styles.storeComparisonCard}>
+            <Text style={styles.storeComparisonTitle}>Supermarket comparison</Text>
+            {stores.map(store => {
+              const modifier = storePriceModifiers[store.id] ?? 1;
+              const storeTotal = groceryTotal * modifier;
+              const isPreferred = store.id === state.preferences.preferredStoreId;
+              return (
+                <View
+                  key={store.id}
+                  style={[
+                    styles.storeComparisonRow,
+                    isPreferred && styles.storeComparisonRowPreferred,
+                    { borderColor: store.primaryColor },
+                  ]}
+                >
+                  <View style={styles.storeComparisonInfo}>
+                    <Text style={styles.storeComparisonName}>{store.name}</Text>
+                    {isPreferred && (
+                      <Text style={styles.preferredBadge}>Preferred</Text>
+                    )}
+                  </View>
+                  <Text style={styles.storeComparisonTotal}>
+                    £{(storeTotal * 0.95).toFixed(2)} - £{(storeTotal * 1.05).toFixed(2)}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+
+          {/* Basket Items */}
           <ScrollView style={styles.groceryScroll} showsVerticalScrollIndicator={false}>
             {Object.entries(groupedGroceries).map(([category, items]) => (
               <View key={category} style={styles.groceryCategory}>
@@ -336,9 +389,9 @@ export default function ShopScreen() {
 
           {/* Shop Button */}
           <View style={[styles.shopButtonContainer, { paddingBottom: insets.bottom + 16 }]}>
-            <TouchableOpacity style={styles.shopButton} onPress={handleShopTesco}>
+            <TouchableOpacity style={styles.shopButton} onPress={handleShopStore}>
               <Ionicons name="cart" size={20} color={Colors.white} />
-              <Text style={styles.shopButtonText}>Shop on Tesco</Text>
+              <Text style={styles.shopButtonText}>Shop at {preferredStore.name}</Text>
               <Ionicons name="open-outline" size={16} color={Colors.white} />
             </TouchableOpacity>
           </View>
@@ -494,6 +547,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: 'rgba(255,255,255,0.7)',
   },
+  grocerySummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: Spacing.sm,
+  },
+  grocerySummaryRowLabel: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.7)',
+  },
+  grocerySummaryRowValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.white,
+  },
   progressBar: {
     height: 4,
     backgroundColor: 'rgba(255,255,255,0.3)',
@@ -508,6 +576,56 @@ const styles = StyleSheet.create({
   groceryScroll: {
     flex: 1,
     paddingHorizontal: Spacing.lg,
+  },
+  storeComparisonCard: {
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.lg,
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.lg,
+    backgroundColor: Colors.backgroundSecondary,
+  },
+  storeComparisonTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.text,
+    marginBottom: Spacing.md,
+  },
+  storeComparisonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    borderLeftWidth: 3,
+    paddingLeft: Spacing.md,
+  },
+  storeComparisonRowPreferred: {
+    backgroundColor: Colors.background,
+  },
+  storeComparisonInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  storeComparisonName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  preferredBadge: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.primary,
+    backgroundColor: `${Colors.primary}20`,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  storeComparisonTotal: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.textSecondary,
   },
   groceryCategory: {
     marginBottom: Spacing.lg,

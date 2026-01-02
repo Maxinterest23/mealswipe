@@ -47,6 +47,10 @@ export interface GroceryItem {
   unit: string;
   category: string;
   estimatedPrice: number;
+  packSize?: number;
+  packPrice?: number;
+  packCount?: number;
+  packCost?: number;
   isChecked: boolean;
   isShared: boolean; // Used by multiple recipes
   sources: string[]; // Recipe names
