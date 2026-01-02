@@ -22,7 +22,7 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function FeedScreen() {
   const insets = useSafeAreaInsets();
-  const { state, dispatch, addToMenu, isInMenu } = useApp();
+  const { state, dispatch, addToMenu, removeFromMenu, isInMenu } = useApp();
   const [showFilters, setShowFilters] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
   const [feedRecipes, setFeedRecipes] = useState(mockRecipes);
@@ -39,6 +39,19 @@ export default function FeedScreen() {
     state.filters.dietary.length;
 
   const handleAddToMenu = useCallback((recipeId: string) => {
+    const alreadyInMenu = isInMenu(recipeId);
+
+    if (alreadyInMenu) {
+      removeFromMenu(recipeId);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      setToast({
+        message: 'Removed from Menu',
+        type: 'info',
+      });
+      setTimeout(() => setToast(null), 2000);
+      return;
+    }
+
     const added = addToMenu(recipeId);
     Haptics.impactAsync(
       added ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light
@@ -48,7 +61,7 @@ export default function FeedScreen() {
       type: added ? 'success' : 'info',
     });
     setTimeout(() => setToast(null), 2000);
-  }, [addToMenu]);
+  }, [addToMenu, isInMenu, removeFromMenu]);
 
   useEffect(() => {
     setFeedRecipes(filteredRecipes);
