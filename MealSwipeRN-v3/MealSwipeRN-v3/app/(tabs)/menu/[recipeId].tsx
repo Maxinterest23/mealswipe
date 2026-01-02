@@ -100,7 +100,7 @@ export default function RecipeDetailScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Method</Text>
+          <Text style={styles.sectionTitle}>Method At-a-Glance</Text>
           {recipe.methodSteps.map((step, index) => (
             <View key={index} style={styles.stepRow}>
               <View style={styles.stepNumber}>
@@ -153,6 +153,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.lg,
     paddingBottom: Spacing.xxxl,
     gap: Spacing.lg,
   },
