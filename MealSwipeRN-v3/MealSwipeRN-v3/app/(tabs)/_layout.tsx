@@ -70,11 +70,11 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="menu"
+        name="menu/index"
         options={{
           title: 'Menu',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="restaurant" size={size} color={color} />
+            <Ionicons name="menu" size={size} color={color} />
           ),
         }}
       />
