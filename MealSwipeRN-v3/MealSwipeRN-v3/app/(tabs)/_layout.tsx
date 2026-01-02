@@ -49,18 +49,18 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Discover',
+          title: 'Feed',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="flame" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
-        name="menu"
+        name="shop"
         options={{
-          title: 'Menu',
+          title: 'Shop',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="restaurant" size={size} color={color} />
+            <Ionicons name="cart" size={size} color={color} />
           ),
           tabBarBadge: state.menu.length > 0 ? state.menu.length : undefined,
           tabBarBadgeStyle: {
@@ -70,11 +70,11 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="settings"
+        name="menu"
         options={{
-          title: 'Settings',
+          title: 'Menu',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings-outline" size={size} color={color} />
+            <Ionicons name="restaurant" size={size} color={color} />
           ),
         }}
       />
