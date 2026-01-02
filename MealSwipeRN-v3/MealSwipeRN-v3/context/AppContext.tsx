@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MenuItem, FilterState, UserPreferences, GroceryItem } from '@/types';
-import { mockRecipes, getRecipeById } from '@/data/recipes';
+import { getRecipeById } from '@/data/recipes';
+import { packSizeHints } from '@/data/packSizes';
 
 // State type
 interface AppState {
@@ -278,7 +279,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
     });
 
-    const groceryList = Object.values(aggregated);
+    const groceryList = Object.values(aggregated).map(item => {
+      const packHint = packSizeHints[item.canonicalName];
+      if (!packHint || packHint.unit !== item.unit) {
+        return item;
+      }
+
+      const packCount = Math.ceil(item.quantity / packHint.packSize);
+      const packCost = packCount * packHint.packPrice;
+
+      return {
+        ...item,
+        packSize: packHint.packSize,
+        packPrice: packHint.packPrice,
+        packCount,
+        packCost,
+      };
+    });
     dispatch({ type: 'SET_GROCERY_LIST', payload: groceryList });
   }
 
