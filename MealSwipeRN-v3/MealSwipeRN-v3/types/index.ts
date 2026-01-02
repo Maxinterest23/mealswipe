@@ -29,6 +29,8 @@ export interface Recipe {
   ingredients: Ingredient[];
   nutrition: Nutrition;
   methodSteps: string[];
+  tips?: string[];
+  substitutions?: string[];
 }
 
 export interface MenuItem {

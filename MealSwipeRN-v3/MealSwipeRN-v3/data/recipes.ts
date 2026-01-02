@@ -28,6 +28,14 @@ export const mockRecipes: Recipe[] = [
       'Quickly add egg mixture, tossing to create creamy sauce.',
       'Serve immediately with extra cheese and pepper.',
     ],
+    tips: [
+      'Temper the eggs with a splash of hot pasta water for an extra silky sauce.',
+      'Keep the pan off the heat when adding eggs to avoid scrambling.',
+    ],
+    substitutions: [
+      'Swap pancetta for bacon or smoked tofu for a lighter option.',
+      'Use pecorino instead of parmesan for a sharper finish.',
+    ],
   },
   {
     id: 'r002',
@@ -56,6 +64,14 @@ export const mockRecipes: Recipe[] = [
       'Add chicken and cook until sealed.',
       'Pour in remaining coconut milk and simmer for 15 minutes.',
       'Add vegetables, fish sauce, and basil. Serve with rice.',
+    ],
+    tips: [
+      'Toast the curry paste slightly longer to deepen the flavor.',
+      'Simmer uncovered for a thicker, richer sauce.',
+    ],
+    substitutions: [
+      'Use tofu or prawns instead of chicken for variety.',
+      'Swap Thai basil with cilantro if needed.',
     ],
   },
   {
@@ -141,6 +157,14 @@ export const mockRecipes: Recipe[] = [
       'Mix honey, garlic, and soy sauce.',
       'Pour sauce over chicken and simmer 5 minutes.',
       'Serve with rice and steamed broccoli.',
+    ],
+    tips: [
+      'Reduce the sauce until it coats the back of a spoon for extra glaze.',
+      'Let the chicken rest for 5 minutes before slicing.',
+    ],
+    substitutions: [
+      'Use tamari for a gluten-free swap.',
+      'Replace honey with maple syrup for a deeper sweetness.',
     ],
   },
   {
