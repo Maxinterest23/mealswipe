@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   FlatList,
@@ -25,8 +25,7 @@ export default function FeedScreen() {
   const { state, dispatch, addToMenu, isInMenu } = useApp();
   const [showFilters, setShowFilters] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const flatListRef = useRef<FlatList>(null);
+  const [feedRecipes, setFeedRecipes] = useState(mockRecipes);
 
   // Filter recipes
   const filteredRecipes = filterRecipes(mockRecipes, state.filters);
@@ -48,15 +47,9 @@ export default function FeedScreen() {
     setTimeout(() => setToast(null), 2000);
   }, [addToMenu]);
 
-  const onViewableItemsChanged = useCallback(({ viewableItems }: any) => {
-    if (viewableItems.length > 0) {
-      setCurrentIndex(viewableItems[0].index || 0);
-    }
-  }, []);
-
-  const viewabilityConfig = {
-    itemVisiblePercentThreshold: 50,
-  };
+  useEffect(() => {
+    setFeedRecipes(filteredRecipes);
+  }, [filteredRecipes]);
 
   const toggleCostTier = (tier: number) => {
     const current = state.filters.costTiers;
@@ -109,9 +102,8 @@ export default function FeedScreen() {
     <View style={styles.container}>
       {/* Recipe feed */}
       <FlatList
-        ref={flatListRef}
-        data={filteredRecipes}
-        keyExtractor={item => item.id}
+        data={feedRecipes}
+        keyExtractor={(item, index) => `${item.id}-${index}`}
         renderItem={({ item }) => (
           <RecipeCard
             recipe={item}
@@ -123,21 +115,14 @@ export default function FeedScreen() {
         showsVerticalScrollIndicator={false}
         snapToInterval={SCREEN_HEIGHT}
         decelerationRate="fast"
-        onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={viewabilityConfig}
+        onEndReached={() => setFeedRecipes(current => [...current, ...filteredRecipes])}
+        onEndReachedThreshold={0.5}
         getItemLayout={(_, index) => ({
           length: SCREEN_HEIGHT,
           offset: SCREEN_HEIGHT * index,
           index,
         })}
       />
-
-      {/* Recipe counter */}
-      <View style={[styles.counter, { top: insets.top + 60 }]}>
-        <Text style={styles.counterText}>
-          {currentIndex + 1} / {filteredRecipes.length}
-        </Text>
-      </View>
 
       {/* Filter button */}
       <TouchableOpacity
@@ -218,19 +203,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
-  },
-  counter: {
-    position: 'absolute',
-    left: Spacing.xl,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: BorderRadius.full,
-  },
-  counterText: {
-    color: Colors.white,
-    fontSize: 14,
-    fontWeight: '500',
   },
   filterButton: {
     position: 'absolute',
