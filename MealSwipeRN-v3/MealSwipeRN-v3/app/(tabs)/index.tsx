@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   FlatList,
@@ -28,7 +28,10 @@ export default function FeedScreen() {
   const [feedRecipes, setFeedRecipes] = useState(mockRecipes);
 
   // Filter recipes
-  const filteredRecipes = filterRecipes(mockRecipes, state.filters);
+  const filteredRecipes = useMemo(
+    () => filterRecipes(mockRecipes, state.filters),
+    [state.filters]
+  );
 
   // Count active filters
   const activeFilterCount =
