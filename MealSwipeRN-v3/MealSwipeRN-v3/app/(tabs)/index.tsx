@@ -15,22 +15,41 @@ import * as Haptics from 'expo-haptics';
 import { RecipeCard } from '@/components/RecipeCard';
 import { Chip, Toast, EmptyState } from '@/components/ui';
 import { useApp } from '@/context/AppContext';
-import { mockRecipes, filterRecipes } from '@/data/recipes';
+import { filterRecipes } from '@/data/recipes';
+import { getFeedPage } from '@/src/data/recipesProvider';
 import { Colors, Spacing, BorderRadius, BadgeInfo, CostTierInfo } from '@/constants/theme';
+import { Recipe } from '@/types';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const PAGE_SIZE = 10;
+
+function mergeUniqueById(current: Recipe[], incoming: Recipe[]): Recipe[] {
+  if (incoming.length === 0) return current;
+  const seen = new Set(current.map(item => item.id));
+  const merged = [...current];
+  for (const item of incoming) {
+    if (!seen.has(item.id)) {
+      merged.push(item);
+      seen.add(item.id);
+    }
+  }
+  return merged;
+}
 
 export default function FeedScreen() {
   const insets = useSafeAreaInsets();
   const { state, dispatch, addToMenu, removeFromMenu, isInMenu } = useApp();
   const [showFilters, setShowFilters] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
-  const [feedRecipes, setFeedRecipes] = useState(mockRecipes);
+  const [allRecipes, setAllRecipes] = useState<Recipe[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [isFetching, setIsFetching] = useState(false);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
   // Filter recipes
   const filteredRecipes = useMemo(
-    () => filterRecipes(mockRecipes, state.filters),
-    [state.filters]
+    () => filterRecipes(allRecipes, state.filters),
+    [allRecipes, state.filters]
   );
 
   // Count active filters
@@ -63,9 +82,33 @@ export default function FeedScreen() {
     setTimeout(() => setToast(null), 2000);
   }, [addToMenu, isInMenu, removeFromMenu]);
 
+  const loadInitialPage = useCallback(async () => {
+    setIsFetching(true);
+    try {
+      const { items, nextCursor: newCursor } = await getFeedPage(null, PAGE_SIZE);
+      setAllRecipes(items);
+      setNextCursor(newCursor);
+    } finally {
+      setIsFetching(false);
+      setHasLoadedOnce(true);
+    }
+  }, []);
+
+  const loadMore = useCallback(async () => {
+    if (isFetching || !nextCursor) return;
+    setIsFetching(true);
+    try {
+      const { items, nextCursor: newCursor } = await getFeedPage(nextCursor, PAGE_SIZE);
+      setAllRecipes(current => mergeUniqueById(current, items));
+      setNextCursor(newCursor);
+    } finally {
+      setIsFetching(false);
+    }
+  }, [isFetching, nextCursor]);
+
   useEffect(() => {
-    setFeedRecipes(filteredRecipes);
-  }, [filteredRecipes]);
+    loadInitialPage();
+  }, [loadInitialPage]);
 
   const toggleCostTier = (tier: number) => {
     const current = state.filters.costTiers;
@@ -101,14 +144,25 @@ export default function FeedScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
 
-  if (filteredRecipes.length === 0) {
+  if (hasLoadedOnce && filteredRecipes.length === 0) {
+    const hasMore = Boolean(nextCursor);
+    const emptyStateTitle = hasMore
+      ? 'No matches yet'
+      : 'No recipes match your filters';
+    const emptyStateSubtitle = hasMore
+      ? 'Try loading more recipes or adjust your filters'
+      : 'Try adjusting your filters to see more recipes';
+    const emptyStateAction = hasMore
+      ? { label: 'Load More', onPress: loadMore }
+      : { label: 'Reset Filters', onPress: resetFilters };
+
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <EmptyState
           icon="restaurant-outline"
-          title="No recipes match your filters"
-          subtitle="Try adjusting your filters to see more recipes"
-          action={{ label: 'Reset Filters', onPress: resetFilters }}
+          title={emptyStateTitle}
+          subtitle={emptyStateSubtitle}
+          action={emptyStateAction}
         />
       </View>
     );
@@ -118,8 +172,8 @@ export default function FeedScreen() {
     <View style={styles.container}>
       {/* Recipe feed */}
       <FlatList
-        data={feedRecipes}
-        keyExtractor={(item, index) => `${item.id}-${index}`}
+        data={filteredRecipes}
+        keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <RecipeCard
             recipe={item}
@@ -131,7 +185,7 @@ export default function FeedScreen() {
         showsVerticalScrollIndicator={false}
         snapToInterval={SCREEN_HEIGHT}
         decelerationRate="fast"
-        onEndReached={() => setFeedRecipes(current => [...current, ...filteredRecipes])}
+        onEndReached={loadMore}
         onEndReachedThreshold={0.5}
         getItemLayout={(_, index) => ({
           length: SCREEN_HEIGHT,

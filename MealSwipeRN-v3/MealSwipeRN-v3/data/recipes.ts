@@ -1,4 +1,5 @@
 import { Recipe } from '@/types';
+import { getCachedRecipeById } from '@/src/data/recipeCache';
 
 export const mockRecipes: Recipe[] = [
   {
@@ -320,7 +321,7 @@ export const mockRecipes: Recipe[] = [
 
 // Helper function to get recipe by ID
 export function getRecipeById(id: string): Recipe | undefined {
-  return mockRecipes.find(r => r.id === id);
+  return getCachedRecipeById(id) ?? mockRecipes.find(r => r.id === id);
 }
 
 // Helper function to filter recipes
