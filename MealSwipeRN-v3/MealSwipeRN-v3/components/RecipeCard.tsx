@@ -3,11 +3,12 @@ import {
   View,
   Text,
   TouchableOpacity,
-  ScrollView,
   StyleSheet,
   Dimensions,
   Pressable,
 } from 'react-native';
+import { ScrollView as GestureScrollView } from 'react-native-gesture-handler';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAudioPlayer } from 'expo-audio';
@@ -15,6 +16,9 @@ import { Recipe } from '@/types';
 import { Colors, BorderRadius, Spacing, CostTierInfo, BadgeInfo } from '@/constants/theme';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const INGREDIENT_VISIBLE_COUNT = 5;
+const INGREDIENT_ROW_HEIGHT = Spacing.sm * 2 + 20;
+const METHOD_VISIBLE_COUNT = 6;
 
 const ADD_SOUND = require('../assets/sounds/positive.wav');
 
@@ -88,6 +92,7 @@ interface RecipeCardProps {
 export function RecipeCard({ recipe, isInMenu, onAddToMenu }: RecipeCardProps) {
   const [isFlipped, setIsFlipped] = useState(false);
   const addSoundPlayer = useAudioPlayer(ADD_SOUND);
+  const insets = useSafeAreaInsets();
 
   const handleFlip = () => {
     setIsFlipped(!isFlipped);
@@ -95,6 +100,7 @@ export function RecipeCard({ recipe, isInMenu, onAddToMenu }: RecipeCardProps) {
 
   const gradientColors = getGradientColors(recipe.imageGradient);
   const totalTime = recipe.prepTimeMinutes + recipe.cookTimeMinutes;
+  const ingredientsScrollable = recipe.ingredients.length > INGREDIENT_VISIBLE_COUNT;
 
   return (
     <Pressable style={styles.container} onPress={handleFlip}>
@@ -140,10 +146,15 @@ export function RecipeCard({ recipe, isInMenu, onAddToMenu }: RecipeCardProps) {
       {/* Back of card */}
       {isFlipped && (
         <View style={styles.cardBack}>
-          <ScrollView
-            style={styles.backScrollView}
-            contentContainerStyle={styles.backContent}
-            showsVerticalScrollIndicator={false}
+          <View
+            style={[
+              styles.backScrollView,
+              styles.backContent,
+              {
+                paddingTop: Spacing.xl + insets.top,
+                paddingBottom: 120 + insets.bottom,
+              },
+            ]}
           >
             <Text style={styles.backTitle}>{recipe.name}</Text>
 
@@ -158,21 +169,55 @@ export function RecipeCard({ recipe, isInMenu, onAddToMenu }: RecipeCardProps) {
 
             {/* Ingredients */}
             <Text style={styles.sectionTitle}>Ingredients</Text>
-            {recipe.ingredients.map((ing, index) => (
-              <View key={index} style={styles.ingredientRow}>
-                <View style={styles.ingredientDot} />
-                <Text style={styles.ingredientName}>{ing.name}</Text>
-                <Text style={styles.ingredientQty}>
-                  {ing.quantity} {ing.unit}
-                </Text>
-              </View>
-            ))}
+            <View style={styles.ingredientsListContainer}>
+              {ingredientsScrollable ? (
+                <GestureScrollView
+                  style={styles.ingredientsScroll}
+                  contentContainerStyle={styles.ingredientsScrollContent}
+                  showsVerticalScrollIndicator={false}
+                  nestedScrollEnabled
+                >
+                  {recipe.ingredients.map((ing, index) => (
+                    <View key={index} style={styles.ingredientRow}>
+                      <View style={styles.ingredientDot} />
+                      <Text style={styles.ingredientName}>{ing.name}</Text>
+                      <Text style={styles.ingredientQty}>
+                        {ing.quantity} {ing.unit}
+                      </Text>
+                    </View>
+                  ))}
+                </GestureScrollView>
+              ) : (
+                <View style={styles.ingredientsScrollContent}>
+                  {recipe.ingredients.map((ing, index) => (
+                    <View key={index} style={styles.ingredientRow}>
+                      <View style={styles.ingredientDot} />
+                      <Text style={styles.ingredientName}>{ing.name}</Text>
+                      <Text style={styles.ingredientQty}>
+                        {ing.quantity} {ing.unit}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+              {ingredientsScrollable && (
+                <LinearGradient
+                  pointerEvents="none"
+                  colors={[
+                    'rgba(255,255,255,0)',
+                    'rgba(255,255,255,0.6)',
+                    Colors.background,
+                  ]}
+                  style={styles.ingredientsFade}
+                />
+              )}
+            </View>
 
             <View style={styles.divider} />
 
             {/* Method */}
-            <Text style={styles.sectionTitle}>Method</Text>
-            {recipe.methodSteps.map((step, index) => (
+            <Text style={styles.sectionTitle}>Simplified Method</Text>
+            {recipe.methodSteps.slice(0, METHOD_VISIBLE_COUNT).map((step, index) => (
               <View key={index} style={styles.stepRow}>
                 <View style={styles.stepNumber}>
                   <Text style={styles.stepNumberText}>{index + 1}</Text>
@@ -182,7 +227,7 @@ export function RecipeCard({ recipe, isInMenu, onAddToMenu }: RecipeCardProps) {
             ))}
             
             <Text style={styles.hintTextBack}>Tap to flip back</Text>
-          </ScrollView>
+          </View>
         </View>
       )}
 
@@ -293,7 +338,6 @@ const styles = StyleSheet.create({
   },
   backContent: {
     padding: Spacing.xl,
-    paddingBottom: 120,
   },
   backTitle: {
     fontSize: 22,
@@ -330,9 +374,27 @@ const styles = StyleSheet.create({
     color: Colors.text,
     marginBottom: Spacing.md,
   },
+  ingredientsListContainer: {
+    maxHeight: INGREDIENT_ROW_HEIGHT * INGREDIENT_VISIBLE_COUNT,
+    position: 'relative',
+  },
+  ingredientsScroll: {
+    flexGrow: 0,
+  },
+  ingredientsScrollContent: {
+    paddingBottom: Spacing.sm,
+  },
+  ingredientsFade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 36,
+  },
   ingredientRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    minHeight: INGREDIENT_ROW_HEIGHT,
     paddingVertical: Spacing.sm,
   },
   ingredientDot: {
@@ -345,10 +407,12 @@ const styles = StyleSheet.create({
   ingredientName: {
     flex: 1,
     fontSize: 15,
+    lineHeight: 20,
     color: Colors.text,
   },
   ingredientQty: {
     fontSize: 15,
+    lineHeight: 20,
     color: Colors.textSecondary,
   },
   stepRow: {
