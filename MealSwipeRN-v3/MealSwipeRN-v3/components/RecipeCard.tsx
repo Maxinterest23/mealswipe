@@ -10,10 +10,13 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useAudioPlayer } from 'expo-audio';
 import { Recipe } from '@/types';
 import { Colors, BorderRadius, Spacing, CostTierInfo, BadgeInfo } from '@/constants/theme';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+const ADD_SOUND = require('../assets/sounds/positive.wav');
 
 // Gradient colors for recipes
 const GRADIENT_COLORS: Record<string, [string, string]> = {
@@ -84,6 +87,7 @@ interface RecipeCardProps {
 
 export function RecipeCard({ recipe, isInMenu, onAddToMenu }: RecipeCardProps) {
   const [isFlipped, setIsFlipped] = useState(false);
+  const addSoundPlayer = useAudioPlayer(ADD_SOUND);
 
   const handleFlip = () => {
     setIsFlipped(!isFlipped);
@@ -190,6 +194,10 @@ export function RecipeCard({ recipe, isInMenu, onAddToMenu }: RecipeCardProps) {
         ]}
         onPress={(e) => {
           e.stopPropagation();
+          if (!isInMenu) {
+            addSoundPlayer.seekTo(0);
+            addSoundPlayer.play();
+          }
           onAddToMenu();
         }}
         activeOpacity={0.8}
