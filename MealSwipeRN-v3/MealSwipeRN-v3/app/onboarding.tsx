@@ -123,12 +123,15 @@ export default function OnboardingScreen() {
           <View style={styles.stepContent}>
             <Text style={styles.title}>Dietary Preferences</Text>
             <Text style={styles.subtitle}>Select any that apply to you</Text>
+            <Text style={styles.disclaimer}>
+              These preferences can be changed at any time in Settings.
+            </Text>
             <View style={styles.optionsList}>
-              {['vegetarian', 'vegan', 'keto'].map(badge => (
+              {Object.entries(BadgeInfo).map(([badge, info]) => (
                 <ToggleChip
                   key={badge}
-                  icon={BadgeInfo[badge].icon}
-                  label={BadgeInfo[badge].label}
+                  icon={info.icon}
+                  label={info.label}
                   selected={dietaryPreferences.includes(badge)}
                   onPress={() => toggleDietary(badge)}
                 />
@@ -271,6 +274,12 @@ const styles = StyleSheet.create({
   featureTitle: { fontSize: 16, fontWeight: '600', color: Colors.text },
   featureSubtitle: { fontSize: 14, color: Colors.textSecondary },
   optionsList: { width: '100%' },
+  disclaimer: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
   toggleChip: { flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: Colors.backgroundSecondary, borderRadius: 12, marginBottom: 8 },
   toggleChipSelected: { backgroundColor: Colors.primary },
   toggleChipIcon: { fontSize: 24, marginRight: 12 },

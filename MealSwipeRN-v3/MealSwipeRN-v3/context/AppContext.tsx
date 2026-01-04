@@ -173,15 +173,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ]);
 
       const loadedState: Partial<AppState> = {};
+      const storedPreferences = preferencesJson
+        ? {
+            ...initialState.preferences,
+            ...JSON.parse(preferencesJson),
+          }
+        : initialState.preferences;
 
-      if (menuJson) {
-        loadedState.menu = JSON.parse(menuJson);
-      }
       if (preferencesJson) {
-        loadedState.preferences = {
-          ...initialState.preferences,
-          ...JSON.parse(preferencesJson),
-        };
+        loadedState.preferences = storedPreferences;
+      }
+      if (menuJson && storedPreferences.hasCompletedOnboarding) {
+        const parsedMenu = JSON.parse(menuJson);
+        if (Array.isArray(parsedMenu)) {
+          loadedState.menu = parsedMenu;
+        }
       }
 
       dispatch({ type: 'LOAD_STATE', payload: loadedState });
