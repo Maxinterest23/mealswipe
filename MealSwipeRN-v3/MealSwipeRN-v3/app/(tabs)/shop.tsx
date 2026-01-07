@@ -92,6 +92,12 @@ export default function ShopScreen() {
   const canShop = Boolean(selectedStore);
   const shopButtonLabel = selectedStore ? `Shop at ${selectedStore.name}` : 'Select a store to shop';
 
+  const quoteByStore = useMemo(() => {
+    const map = new Map<string, QuoteResponse['quotes'][number]>();
+    quotes?.quotes?.forEach(quote => map.set(quote.store, quote));
+    return map;
+  }, [quotes]);
+
   const handleShopStore = () => {
     if (!selectedStore) {
       setToast({ message: 'Select a store to shop', type: 'info' });
@@ -144,11 +150,6 @@ export default function ShopScreen() {
     waitrose: 1.08,
   };
 
-  const quoteByStore = useMemo(() => {
-    const map = new Map<string, QuoteResponse['quotes'][number]>();
-    quotes?.quotes?.forEach(quote => map.set(quote.store, quote));
-    return map;
-  }, [quotes]);
   const hasQuoteData = Boolean(quotes?.quotes?.length) && !isFallback;
   const anyMissingItems = hasQuoteData && quotes?.quotes?.some(quote => quote.missingCount > 0);
   const selectedQuote = selectedStoreId ? quoteByStore.get(selectedStoreId) : null;
