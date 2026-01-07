@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Modal,
   Linking,
+  Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -60,17 +61,27 @@ export default function ShopScreen() {
     Object.entries(grouped).forEach(([category, items]) => {
       text += `━━━ ${category} ━━━\n`;
       items.forEach(item => {
-        text += `○ ${item.ingredientName} (${item.quantity} ${item.unit}) - £${item.estimatedPrice.toFixed(2)}\n`;
+        text += `○ ${item.ingredientName} (${item.quantity} ${item.unit})\n`;
       });
       text += '\n';
     });
 
-    const total = state.groceryList.reduce((sum, item) => sum + item.estimatedPrice, 0);
-    text += `Estimated total: £${total.toFixed(2)}`;
-
     await Clipboard.setStringAsync(text);
+    let shareOpened = false;
+    try {
+      await Share.share(
+        { message: text, title: 'MealSwipe Basket' },
+        { dialogTitle: 'Paste into Notepad' }
+      );
+      shareOpened = true;
+    } catch (error) {
+      shareOpened = false;
+    }
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setToast({ message: 'Copied to clipboard!', type: 'success' });
+    setToast({
+      message: shareOpened ? 'Copied. Choose Notepad to paste.' : 'Copied to clipboard!',
+      type: 'success',
+    });
     setTimeout(() => setToast(null), 2000);
   };
 
