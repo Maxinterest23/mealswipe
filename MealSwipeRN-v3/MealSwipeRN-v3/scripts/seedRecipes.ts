@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import { mockRecipes } from '../data/recipes';
 
 interface PublishedRecipeInsert {
   id: string;
@@ -22,6 +21,23 @@ interface PublishedRecipeInsert {
   nutrition: Record<string, unknown> | null;
   tips: string[] | null;
   substitutions: string[] | null;
+}
+
+interface RecipeSeed {
+  id: string;
+  name: string;
+  tips?: string[] | null;
+  icon?: string | null;
+  imageGradient?: string | null;
+  servings?: number | null;
+  prepTimeMinutes?: number | null;
+  cookTimeMinutes?: number | null;
+  costTier?: number | null;
+  badges?: string[] | null;
+  ingredients?: unknown[];
+  methodSteps?: string[];
+  nutrition?: Record<string, unknown> | null;
+  substitutions?: string[] | null;
 }
 
 const DEFAULT_BATCH_SIZE = 25;
@@ -59,8 +75,8 @@ function chunk<T>(items: T[], size: number): T[][] {
   return batches;
 }
 
-function mapRecipeToInsert(): PublishedRecipeInsert[] {
-  return mockRecipes.map((recipe) => ({
+function mapRecipeToInsert(recipes: RecipeSeed[]): PublishedRecipeInsert[] {
+  return recipes.map((recipe) => ({
     id: recipe.id,
     title: recipe.name,
     description: recipe.tips?.[0] ?? null,
@@ -124,7 +140,9 @@ async function main() {
     process.exit(1);
   }
 
-  const rows = mapRecipeToInsert();
+  const recipesModule = await import(new URL('../data/mockRecipes.ts', import.meta.url).href);
+  const recipes = recipesModule.mockRecipes as RecipeSeed[];
+  const rows = mapRecipeToInsert(recipes);
   if (rows.length === 0) {
     console.log('No recipes found to seed.');
     return;

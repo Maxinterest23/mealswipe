@@ -43,6 +43,28 @@ npx expo start
 
 To force local-only data, set `EXPO_PUBLIC_USE_REMOTE_FEED=false`.
 
+## Price Comparison (Quotes)
+
+See `docs/price-comparison.md` for full setup and seeding instructions.
+
+Quick steps:
+1. Apply the migration in `supabase/migrations/20250112000100_price_comparison.sql`.
+2. Deploy/serve the Edge Function `quote`.
+3. Set Expo env vars:
+   - `EXPO_PUBLIC_SUPABASE_URL`
+   - `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+   - `EXPO_PUBLIC_QUOTES_ENDPOINT` (optional override)
+4. Seed canonical items and store mappings:
+
+```bash
+node scripts/seedCanonicalItems.ts
+node scripts/seedStoreMappings.ts
+```
+
+Provider wiring (server-only):
+- Set `PROVIDER_BASE_URL` and `PROVIDER_API_KEY` for the Edge Function.
+- Replace placeholder `provider_product_id` values in `store_products`.
+
 ## Content Pipeline TODO
 
 - TODO: Ingest -> normalize -> validate -> publish (recipes_raw -> recipes_normalized -> recipes_published)

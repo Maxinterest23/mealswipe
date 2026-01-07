@@ -23,6 +23,13 @@ export const stores: Store[] = [
     searchUrlTemplate: 'https://groceries.asda.com/',
   },
   {
+    id: 'morrisons',
+    name: 'Morrisons',
+    primaryColor: '#006B3F',
+    isOnlineEnabled: true,
+    searchUrlTemplate: 'https://groceries.morrisons.com/',
+  },
+  {
     id: 'waitrose',
     name: 'Waitrose',
     primaryColor: '#2E7D32',

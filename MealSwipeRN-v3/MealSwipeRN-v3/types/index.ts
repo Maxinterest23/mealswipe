@@ -81,7 +81,6 @@ export interface UserPreferences {
   allergies: string[];
   householdSize: number;
   defaultCostTier: number;
-  preferredStoreId: string;
 }
 
 // Store type for price comparison

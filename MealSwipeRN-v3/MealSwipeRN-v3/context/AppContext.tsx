@@ -43,7 +43,6 @@ const initialState: AppState = {
     allergies: [],
     householdSize: 2,
     defaultCostTier: 2,
-    preferredStoreId: 'tesco',
   },
   groceryList: [],
   isLoading: true,
@@ -255,16 +254,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const scale = menuItem.servings / recipe.servings;
 
       recipe.ingredients.forEach(ing => {
-        const key = ing.canonicalName.toLowerCase();
+        const rawName = typeof ing.canonicalName === 'string' ? ing.canonicalName : ing.name;
+        if (!rawName) return;
+        const key = rawName.toLowerCase();
 
         if (!aggregated[key]) {
           aggregated[key] = {
             id: `grocery_${key}`,
-            ingredientName: ing.name,
-            canonicalName: ing.canonicalName,
+            ingredientName: ing.name ?? rawName,
+            canonicalName: rawName,
             quantity: 0,
-            unit: ing.unit,
-            category: ing.category,
+            unit: ing.unit ?? 'piece',
+            category: ing.category ?? 'Uncategorized',
             estimatedPrice: 0,
             isChecked: false,
             isShared: false,
@@ -272,8 +273,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
           };
         }
 
-        aggregated[key].quantity += ing.quantity * scale;
-        aggregated[key].estimatedPrice += ing.price * scale;
+        const quantity = Number(ing.quantity);
+        const price = Number(ing.price);
+        if (Number.isFinite(quantity)) {
+          aggregated[key].quantity += quantity * scale;
+        }
+        if (Number.isFinite(price)) {
+          aggregated[key].estimatedPrice += price * scale;
+        }
         
         if (!aggregated[key].sources.includes(recipe.name)) {
           aggregated[key].sources.push(recipe.name);

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -18,12 +18,16 @@ import { useApp } from '@/context/AppContext';
 import { getRecipeById } from '@/data/recipes';
 import { stores } from '@/data/stores';
 import { Colors, Spacing, BorderRadius, CategoryIcons } from '@/constants/theme';
+import { usePriceQuotes } from '@/src/features/shop/usePriceQuotes';
+import type { QuoteResponse } from '@/src/api/quoteClient';
 
 export default function ShopScreen() {
   const insets = useSafeAreaInsets();
   const { state, removeFromMenu, updateServings, clearMenu, generateGroceryList, getMenuTotal, dispatch } = useApp();
   const [showGroceryList, setShowGroceryList] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
+  const { quotes, isLoading: quoteLoading, error: quoteError, isFallback } = usePriceQuotes(state.menu);
 
   const menuTotal = getMenuTotal();
 
@@ -70,10 +74,20 @@ export default function ShopScreen() {
     setTimeout(() => setToast(null), 2000);
   };
 
-  const preferredStore = stores.find(store => store.id === state.preferences.preferredStoreId) ?? stores[0];
+  const selectedStore = useMemo(
+    () => (selectedStoreId ? stores.find(store => store.id === selectedStoreId) ?? null : null),
+    [selectedStoreId]
+  );
+  const canShop = Boolean(selectedStore);
+  const shopButtonLabel = selectedStore ? `Shop at ${selectedStore.name}` : 'Select a store to shop';
 
   const handleShopStore = () => {
-    Linking.openURL(preferredStore.searchUrlTemplate);
+    if (!selectedStore) {
+      setToast({ message: 'Select a store to shop', type: 'info' });
+      setTimeout(() => setToast(null), 2000);
+      return;
+    }
+    Linking.openURL(selectedStore.searchUrlTemplate);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
 
@@ -115,8 +129,21 @@ export default function ShopScreen() {
     tesco: 1,
     sainsburys: 1.03,
     asda: 0.97,
+    morrisons: 1.01,
     waitrose: 1.08,
   };
+
+  const quoteByStore = useMemo(() => {
+    const map = new Map<string, QuoteResponse['quotes'][number]>();
+    quotes?.quotes?.forEach(quote => map.set(quote.store, quote));
+    return map;
+  }, [quotes]);
+  const hasQuoteData = Boolean(quotes?.quotes?.length) && !isFallback;
+  const anyMissingItems = hasQuoteData && quotes?.quotes?.some(quote => quote.missingCount > 0);
+  const selectedQuote = selectedStoreId ? quoteByStore.get(selectedStoreId) : null;
+  const sortedLineItems = selectedQuote?.lineItems
+    ? [...selectedQuote.lineItems].sort((a, b) => b.lineTotal - a.lineTotal)
+    : [];
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -260,7 +287,9 @@ export default function ShopScreen() {
             colors={[Colors.tescoBlue, '#003d73']}
             style={styles.grocerySummary}
           >
-            <Text style={styles.grocerySummaryLabel}>Estimated Basket Total</Text>
+            <Text style={styles.grocerySummaryLabel}>
+              {hasQuoteData ? 'Estimated Basket Total' : 'Local Basket Estimate'}
+            </Text>
             <Text style={styles.grocerySummaryValue}>
               £{(groceryTotal * 0.95).toFixed(2)} - £{(groceryTotal * 1.05).toFixed(2)}
             </Text>
@@ -295,34 +324,105 @@ export default function ShopScreen() {
             </View>
           </LinearGradient>
 
+          {anyMissingItems && (
+            <View style={styles.missingBanner}>
+              <Ionicons name="alert-circle" size={16} color={Colors.warning} />
+              <Text style={styles.missingBannerText}>
+                Some items could not be priced yet. Totals are estimates.
+              </Text>
+            </View>
+          )}
+
+          {(quoteLoading || quoteError) && (
+            <View style={styles.quoteStatusRow}>
+              <Text style={styles.quoteStatusText}>
+                {quoteLoading ? 'Updating store prices...' : 'Using local estimate for now.'}
+              </Text>
+            </View>
+          )}
+
           <View style={styles.storeComparisonCard}>
             <Text style={styles.storeComparisonTitle}>Supermarket comparison</Text>
             {stores.map(store => {
               const modifier = storePriceModifiers[store.id] ?? 1;
               const storeTotal = groceryTotal * modifier;
-              const isPreferred = store.id === state.preferences.preferredStoreId;
+              const quote = hasQuoteData ? quoteByStore.get(store.id) : null;
               return (
-                <View
+                <TouchableOpacity
                   key={store.id}
                   style={[
                     styles.storeComparisonRow,
-                    isPreferred && styles.storeComparisonRowPreferred,
                     { borderColor: store.primaryColor },
                   ]}
+                  onPress={() => setSelectedStoreId(store.id)}
+                  activeOpacity={0.7}
                 >
                   <View style={styles.storeComparisonInfo}>
                     <Text style={styles.storeComparisonName}>{store.name}</Text>
-                    {isPreferred && (
-                      <Text style={styles.preferredBadge}>Preferred</Text>
+                    {quote?.missingCount ? (
+                      <View style={styles.missingBadge}>
+                        <Text style={styles.missingBadgeText}>
+                          Missing {quote.missingCount}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <View style={styles.storeComparisonTotals}>
+                    {quote ? (
+                      <>
+                        <Text style={styles.storeComparisonTotal}>
+                          £{quote.basketTotal.toFixed(2)} est
+                        </Text>
+                        <Text style={styles.storeComparisonSubTotal}>
+                          £{quote.consumedEstimate.toFixed(2)} consumed
+                        </Text>
+                        <Text style={styles.storeComparisonMeta}>
+                          Updated {new Date(quote.lastUpdated).toLocaleString()}
+                        </Text>
+                      </>
+                    ) : (
+                      <>
+                        <Text style={styles.storeComparisonTotal}>
+                          £{(storeTotal * 0.95).toFixed(2)} - £{(storeTotal * 1.05).toFixed(2)}
+                        </Text>
+                        <Text style={styles.storeComparisonMeta}>Local estimate</Text>
+                      </>
                     )}
                   </View>
-                  <Text style={styles.storeComparisonTotal}>
-                    £{(storeTotal * 0.95).toFixed(2)} - £{(storeTotal * 1.05).toFixed(2)}
-                  </Text>
-                </View>
+                </TouchableOpacity>
               );
             })}
           </View>
+
+          {selectedQuote && (
+            <View style={styles.storeDetailCard}>
+              <Text style={styles.storeDetailTitle}>
+                {stores.find(store => store.id === selectedQuote.store)?.name ?? selectedQuote.store} details
+              </Text>
+              <Text style={styles.storeDetailSubtitle}>Line items (estimate)</Text>
+              {sortedLineItems.map(item => (
+                <View key={item.storeProductId} style={styles.lineItemRow}>
+                  <View style={styles.lineItemInfo}>
+                    <Text style={styles.lineItemTitle} numberOfLines={1}>{item.productTitle}</Text>
+                    <Text style={styles.lineItemMeta}>
+                      {item.packsNeeded} x {item.packSize.value} {item.packSize.unit}
+                    </Text>
+                  </View>
+                  <Text style={styles.lineItemTotal}>£{item.lineTotal.toFixed(2)}</Text>
+                </View>
+              ))}
+              {selectedQuote.missingItems.length > 0 && (
+                <View style={styles.missingList}>
+                  <Text style={styles.missingListTitle}>Missing items</Text>
+                  {selectedQuote.missingItems.map((missing, index) => (
+                    <Text key={`${missing.ingredientName}-${index}`} style={styles.missingListItem}>
+                      {missing.ingredientName} ({missing.reason})
+                    </Text>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
 
           {/* Basket Items */}
           <ScrollView style={styles.groceryScroll} showsVerticalScrollIndicator={false}>
@@ -389,10 +489,16 @@ export default function ShopScreen() {
 
           {/* Shop Button */}
           <View style={[styles.shopButtonContainer, { paddingBottom: insets.bottom + 16 }]}>
-            <TouchableOpacity style={styles.shopButton} onPress={handleShopStore}>
-              <Ionicons name="cart" size={20} color={Colors.white} />
-              <Text style={styles.shopButtonText}>Shop at {preferredStore.name}</Text>
-              <Ionicons name="open-outline" size={16} color={Colors.white} />
+            <TouchableOpacity
+              style={[styles.shopButton, !canShop && styles.shopButtonDisabled]}
+              onPress={handleShopStore}
+              disabled={!canShop}
+            >
+              <Ionicons name="cart" size={20} color={canShop ? Colors.white : Colors.textSecondary} />
+              <Text style={[styles.shopButtonText, !canShop && styles.shopButtonTextDisabled]}>
+                {shopButtonLabel}
+              </Text>
+              <Ionicons name="open-outline" size={16} color={canShop ? Colors.white : Colors.textSecondary} />
             </TouchableOpacity>
           </View>
         </View>
@@ -593,39 +699,140 @@ const styles = StyleSheet.create({
   storeComparisonRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingVertical: Spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
     borderLeftWidth: 3,
     paddingLeft: Spacing.md,
   },
-  storeComparisonRowPreferred: {
-    backgroundColor: Colors.background,
-  },
   storeComparisonInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
+    flexWrap: 'wrap',
+    flex: 1,
+  },
+  storeComparisonTotals: {
+    alignItems: 'flex-end',
+    flexShrink: 0,
+    maxWidth: 170,
   },
   storeComparisonName: {
     fontSize: 14,
     fontWeight: '600',
     color: Colors.text,
   },
-  preferredBadge: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: Colors.primary,
-    backgroundColor: `${Colors.primary}20`,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
   storeComparisonTotal: {
     fontSize: 13,
     fontWeight: '600',
     color: Colors.textSecondary,
+  },
+  storeComparisonSubTotal: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  storeComparisonMeta: {
+    fontSize: 11,
+    color: Colors.textTertiary,
+    marginTop: 4,
+  },
+  missingBadge: {
+    backgroundColor: `${Colors.warning}20`,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  missingBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: Colors.warning,
+  },
+  missingBanner: {
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    backgroundColor: `${Colors.warning}10`,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  missingBannerText: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    flex: 1,
+  },
+  quoteStatusRow: {
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
+  },
+  quoteStatusText: {
+    fontSize: 12,
+    color: Colors.textTertiary,
+  },
+  storeDetailCard: {
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.lg,
+    padding: Spacing.lg,
+    borderRadius: BorderRadius.lg,
+    backgroundColor: Colors.backgroundSecondary,
+  },
+  storeDetailTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.text,
+    marginBottom: Spacing.xs,
+  },
+  storeDetailSubtitle: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginBottom: Spacing.md,
+  },
+  lineItemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  lineItemInfo: {
+    flex: 1,
+    marginRight: Spacing.md,
+  },
+  lineItemTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  lineItemMeta: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  lineItemTotal: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  missingList: {
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  missingListTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+    marginBottom: Spacing.sm,
+  },
+  missingListItem: {
+    fontSize: 11,
+    color: Colors.textTertiary,
+    marginBottom: 4,
   },
   groceryCategory: {
     marginBottom: Spacing.lg,
@@ -729,9 +936,15 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     gap: Spacing.sm,
   },
+  shopButtonDisabled: {
+    backgroundColor: Colors.border,
+  },
   shopButtonText: {
     color: Colors.white,
     fontSize: 16,
     fontWeight: '600',
+  },
+  shopButtonTextDisabled: {
+    color: Colors.textSecondary,
   },
 });
