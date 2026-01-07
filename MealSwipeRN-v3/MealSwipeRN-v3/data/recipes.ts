@@ -1,8 +1,9 @@
 import { Recipe } from '@/types';
 import { getCachedRecipeById } from '@/src/data/recipeCache';
+import { curatedRecipes } from './curatedRecipes';
 import { mockRecipes as mockRecipesData } from './mockRecipes';
 
-export const mockRecipes: Recipe[] = mockRecipesData as Recipe[];
+export const mockRecipes: Recipe[] = [...curatedRecipes, ...(mockRecipesData as Recipe[])];
 
 // Helper function to get recipe by ID
 export function getRecipeById(id: string): Recipe | undefined {

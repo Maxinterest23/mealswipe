@@ -19,6 +19,10 @@ export interface Nutrition {
 export interface Recipe {
   id: string;
   name: string;
+  description?: string;
+  imageUrl?: string;
+  imageAttribution?: string;
+  source?: string;
   imageGradient: string; // CSS gradient string
   icon: string; // Emoji
   prepTimeMinutes: number;
