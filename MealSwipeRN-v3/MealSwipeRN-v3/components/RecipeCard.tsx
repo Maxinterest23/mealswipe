@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Dimensions,
+  Image,
   Pressable,
 } from 'react-native';
 import { ScrollView as GestureScrollView } from 'react-native-gesture-handler';
@@ -107,6 +108,12 @@ export function RecipeCard({ recipe, isInMenu, onAddToMenu }: RecipeCardProps) {
       {/* Front of card */}
       {!isFlipped && (
         <LinearGradient colors={gradientColors} style={styles.gradient}>
+          {recipe.imageUrl ? (
+            <>
+              <Image source={{ uri: recipe.imageUrl }} style={styles.heroImage} />
+              <View style={styles.imageScrim} />
+            </>
+          ) : null}
           {/* Recipe icon */}
           <View style={styles.iconContainer}>
             <Text style={styles.recipeIcon}>{recipe.icon}</Text>
@@ -131,6 +138,9 @@ export function RecipeCard({ recipe, isInMenu, onAddToMenu }: RecipeCardProps) {
 
             {/* Title */}
             <Text style={styles.recipeName}>{recipe.name}</Text>
+            {recipe.description ? (
+              <Text style={styles.recipeDescription}>{recipe.description}</Text>
+            ) : null}
 
             {/* Nutrition */}
             <Text style={styles.nutritionText}>
@@ -267,6 +277,15 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'flex-end',
   },
+  heroImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+  imageScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+  },
   cardBack: {
     flex: 1,
     backgroundColor: Colors.background,
@@ -315,6 +334,11 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: '700',
     color: Colors.white,
+    marginBottom: Spacing.sm,
+  },
+  recipeDescription: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.9)',
     marginBottom: Spacing.sm,
   },
   nutritionText: {

@@ -94,6 +94,8 @@ function mapRemoteRecipe(row: RemoteRecipeRow): Recipe {
   return {
     id: row.id,
     name: row.title,
+    description: row.description ?? undefined,
+    imageUrl: row.image_url ?? undefined,
     imageGradient: row.image_gradient ?? pickFromList(FALLBACK_GRADIENTS, row.id, 'linear-gradient(135deg, #FF6B35 0%, #ff8a5c 100%)'),
     icon: row.icon ?? pickFromList(FALLBACK_ICONS, row.id, '?'),
     prepTimeMinutes: prepMinutes,
