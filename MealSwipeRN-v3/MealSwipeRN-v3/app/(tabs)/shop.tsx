@@ -21,6 +21,7 @@ import { stores } from '@/data/stores';
 import { Colors, Spacing, BorderRadius, CategoryIcons } from '@/constants/theme';
 import { usePriceQuotes } from '@/src/features/shop/usePriceQuotes';
 import type { QuoteResponse } from '@/src/api/quoteClient';
+import { formatQuantity } from '@/src/utils/formatQuantity';
 
 export default function ShopScreen() {
   const insets = useSafeAreaInsets();
@@ -61,7 +62,11 @@ export default function ShopScreen() {
     Object.entries(grouped).forEach(([category, items]) => {
       text += `━━━ ${category} ━━━\n`;
       items.forEach(item => {
-        text += `○ ${item.ingredientName} (${item.quantity} ${item.unit})\n`;
+        const hasLeadingAmount = /^\s*\d/.test(item.ingredientName);
+        const quantityText = `${formatQuantity(item.quantity)} ${item.unit}`;
+        text += hasLeadingAmount
+          ? `○ ${item.ingredientName}\n`
+          : `○ ${item.ingredientName} (${quantityText})\n`;
       });
       text += '\n';
     });
@@ -485,7 +490,7 @@ export default function ShopScreen() {
                           )}
                         </Text>
                         <Text style={styles.groceryItemQty}>
-                          {Math.round(item.quantity)} {item.unit}
+                          {formatQuantity(item.quantity)} {item.unit}
                         </Text>
                       </View>
 
