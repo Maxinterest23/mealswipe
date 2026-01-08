@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,9 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const INGREDIENT_VISIBLE_COUNT = 5;
 const INGREDIENT_ROW_HEIGHT = Spacing.sm * 2 + 20;
 const METHOD_VISIBLE_COUNT = 6;
+const IMAGE_OVERSCAN = 1.15;
+const IMAGE_FOCUS_TARGET_Y = 0.38;
+const DEFAULT_IMAGE_FOCUS_Y = 0.45;
 
 const ADD_SOUND = require('../assets/sounds/positive.wav');
 
@@ -92,6 +95,13 @@ interface RecipeCardProps {
 
 export function RecipeCard({ recipe, isInMenu, onAddToMenu }: RecipeCardProps) {
   const [isFlipped, setIsFlipped] = useState(false);
+  const [imageLayout, setImageLayout] = useState<{
+    width: number;
+    height: number;
+    offsetX: number;
+    offsetY: number;
+  } | null>(null);
+  const [contentTopY, setContentTopY] = useState<number | null>(null);
   const addSoundPlayer = useAudioPlayer(ADD_SOUND);
   const insets = useSafeAreaInsets();
 
@@ -102,6 +112,60 @@ export function RecipeCard({ recipe, isInMenu, onAddToMenu }: RecipeCardProps) {
   const gradientColors = getGradientColors(recipe.imageGradient);
   const totalTime = recipe.prepTimeMinutes + recipe.cookTimeMinutes;
   const ingredientsScrollable = recipe.ingredients.length > INGREDIENT_VISIBLE_COUNT;
+  const focusTargetY =
+    contentTopY === null
+      ? IMAGE_FOCUS_TARGET_Y
+      : Math.max(0.2, Math.min(0.55, (contentTopY - Spacing.md) / SCREEN_HEIGHT));
+  const heroImageStyle = imageLayout
+    ? [
+        styles.heroImage,
+        {
+          width: imageLayout.width,
+          height: imageLayout.height,
+          left: imageLayout.offsetX,
+          top: imageLayout.offsetY,
+        },
+      ]
+    : [styles.heroImage, styles.heroImageFallback];
+
+  useEffect(() => {
+    let isMounted = true;
+    if (!recipe.imageUrl) {
+      setImageLayout(null);
+      return;
+    }
+
+    Image.getSize(
+      recipe.imageUrl,
+      (width, height) => {
+        if (!isMounted) return;
+        const baseScale = Math.max(SCREEN_WIDTH / width, SCREEN_HEIGHT / height);
+        const focusY =
+          typeof recipe.imageFocusY === 'number' ? recipe.imageFocusY : DEFAULT_IMAGE_FOCUS_Y;
+        const needsLift = focusY > focusTargetY;
+        const scale = baseScale * (needsLift ? IMAGE_OVERSCAN : 1);
+        const scaledWidth = width * scale;
+        const scaledHeight = height * scale;
+        const excessY = Math.max(0, scaledHeight - SCREEN_HEIGHT);
+        const desiredOffsetY = focusTargetY * SCREEN_HEIGHT - focusY * scaledHeight;
+        const clampedOffsetY = Math.min(0, Math.max(-excessY, desiredOffsetY));
+        const offsetX = (SCREEN_WIDTH - scaledWidth) / 2;
+        setImageLayout({
+          width: scaledWidth,
+          height: scaledHeight,
+          offsetX,
+          offsetY: clampedOffsetY,
+        });
+      },
+      () => {
+        if (isMounted) setImageLayout(null);
+      }
+    );
+
+    return () => {
+      isMounted = false;
+    };
+  }, [recipe.imageUrl, recipe.imageFocusY, focusTargetY]);
 
   return (
     <Pressable style={styles.container} onPress={handleFlip}>
@@ -110,23 +174,37 @@ export function RecipeCard({ recipe, isInMenu, onAddToMenu }: RecipeCardProps) {
         <LinearGradient colors={gradientColors} style={styles.gradient}>
           {recipe.imageUrl ? (
             <>
-              <Image source={{ uri: recipe.imageUrl }} style={styles.heroImage} />
-              <View style={styles.imageScrim} />
+              <Image source={{ uri: recipe.imageUrl }} style={heroImageStyle} />
+              <LinearGradient
+                colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.7)']}
+                locations={[0, 0.55, 1]}
+                style={styles.imageScrim}
+              />
             </>
           ) : null}
           {/* Recipe icon */}
-          <View style={styles.iconContainer}>
-            <Text style={styles.recipeIcon}>{recipe.icon}</Text>
-          </View>
+          {!recipe.imageUrl ? (
+            <View style={styles.iconContainer}>
+              <Text style={styles.recipeIcon}>{recipe.icon}</Text>
+            </View>
+          ) : null}
 
           {/* Bottom gradient overlay */}
           <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.8)']}
+            colors={['transparent', 'rgba(0,0,0,0.65)']}
             style={styles.bottomGradient}
           />
 
           {/* Content */}
-          <View style={styles.frontContent}>
+          <View
+            style={styles.frontContent}
+            onLayout={(event) => {
+              const nextTop = event.nativeEvent.layout.y;
+              if (contentTopY !== nextTop) {
+                setContentTopY(nextTop);
+              }
+            }}
+          >
             {/* Badges */}
             <View style={styles.badgeRow}>
               <CostTierBadge tier={recipe.costTier} />
@@ -276,15 +354,17 @@ const styles = StyleSheet.create({
   gradient: {
     flex: 1,
     justifyContent: 'flex-end',
+    overflow: 'hidden',
   },
   heroImage: {
+    position: 'absolute',
+    resizeMode: 'cover',
+  },
+  heroImageFallback: {
     ...StyleSheet.absoluteFillObject,
-    width: '100%',
-    height: '100%',
   },
   imageScrim: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.25)',
   },
   cardBack: {
     flex: 1,
@@ -303,7 +383,7 @@ const styles = StyleSheet.create({
   },
   bottomGradient: {
     ...StyleSheet.absoluteFillObject,
-    top: '40%',
+    top: '50%',
   },
   frontContent: {
     padding: Spacing.xl,

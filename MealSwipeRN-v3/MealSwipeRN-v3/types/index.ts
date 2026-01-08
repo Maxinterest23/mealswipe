@@ -23,6 +23,7 @@ export interface Recipe {
   imageUrl?: string;
   imageAttribution?: string;
   source?: string;
+  imageFocusY?: number;
   imageGradient: string; // CSS gradient string
   icon: string; // Emoji
   prepTimeMinutes: number;

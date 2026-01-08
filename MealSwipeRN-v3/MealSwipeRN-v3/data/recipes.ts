@@ -2,8 +2,13 @@ import { Recipe } from '@/types';
 import { getCachedRecipeById } from '@/src/data/recipeCache';
 import { curatedRecipes } from './curatedRecipes';
 import { mockRecipes as mockRecipesData } from './mockRecipes';
+const sampleData = require('./sample_recipes.json') as { recipes?: Recipe[] };
 
-export const mockRecipes: Recipe[] = [...curatedRecipes, ...(mockRecipesData as Recipe[])];
+const sampleRecipes = sampleData?.recipes ?? [];
+
+export const mockRecipes: Recipe[] = sampleRecipes.length
+  ? sampleRecipes
+  : [...curatedRecipes, ...(mockRecipesData as Recipe[])];
 
 // Helper function to get recipe by ID
 export function getRecipeById(id: string): Recipe | undefined {
