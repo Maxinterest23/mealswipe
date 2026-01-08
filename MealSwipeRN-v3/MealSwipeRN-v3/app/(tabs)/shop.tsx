@@ -161,6 +161,7 @@ export default function ShopScreen() {
   const sortedLineItems = selectedQuote?.lineItems
     ? [...selectedQuote.lineItems].sort((a, b) => b.lineTotal - a.lineTotal)
     : [];
+  const modalScrollBottomPadding = Spacing.xxxl + Spacing.xl + Spacing.lg + insets.bottom;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -299,209 +300,215 @@ export default function ShopScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Summary Card */}
-          <LinearGradient
-            colors={[Colors.tescoBlue, '#003d73']}
-            style={styles.grocerySummary}
+          <ScrollView
+            style={styles.modalScroll}
+            contentContainerStyle={{ paddingBottom: modalScrollBottomPadding }}
+            showsVerticalScrollIndicator={false}
           >
-            <Text style={styles.grocerySummaryLabel}>
-              {hasQuoteData ? 'Estimated Basket Total' : 'Local Basket Estimate'}
-            </Text>
-            <Text style={styles.grocerySummaryValue}>
-              £{(groceryTotal * 0.95).toFixed(2)} - £{(groceryTotal * 1.05).toFixed(2)}
-            </Text>
-            <View style={styles.groceryStatsRow}>
-              <View style={styles.groceryStat}>
-                <Text style={styles.groceryStatValue}>{state.groceryList.length}</Text>
-                <Text style={styles.groceryStatLabel}>Ingredients</Text>
-              </View>
-              <View style={styles.groceryStat}>
-                <Text style={styles.groceryStatValue}>{checkedCount}</Text>
-                <Text style={styles.groceryStatLabel}>In basket</Text>
-              </View>
-              <View style={styles.groceryStat}>
-                <Text style={styles.groceryStatValue}>£{overlapSavings.toFixed(2)}</Text>
-                <Text style={styles.groceryStatLabel}>Overlap savings</Text>
-              </View>
-            </View>
-            <View style={styles.grocerySummaryRow}>
-              <Text style={styles.grocerySummaryRowLabel}>Pack size optimization</Text>
-              <Text style={styles.grocerySummaryRowValue}>
-                {packOptimizationDelta >= 0 ? '+' : '-'}£{Math.abs(packOptimizationDelta).toFixed(2)}
+            {/* Summary Card */}
+            <LinearGradient
+              colors={[Colors.tescoBlue, '#003d73']}
+              style={styles.grocerySummary}
+            >
+              <Text style={styles.grocerySummaryLabel}>
+                {hasQuoteData ? 'Estimated Basket Total' : 'Local Basket Estimate'}
               </Text>
-            </View>
-            {/* Progress bar */}
-            <View style={styles.progressBar}>
-              <View
-                style={[
-                  styles.progressFill,
-                  { width: `${(checkedCount / state.groceryList.length) * 100}%` },
-                ]}
-              />
-            </View>
-          </LinearGradient>
-
-          {anyMissingItems && (
-            <View style={styles.missingBanner}>
-              <Ionicons name="alert-circle" size={16} color={Colors.warning} />
-              <Text style={styles.missingBannerText}>
-                Some items could not be priced yet. Totals are estimates.
+              <Text style={styles.grocerySummaryValue}>
+                £{(groceryTotal * 0.95).toFixed(2)} - £{(groceryTotal * 1.05).toFixed(2)}
               </Text>
-            </View>
-          )}
-
-          {(quoteLoading || quoteError) && (
-            <View style={styles.quoteStatusRow}>
-              <Text style={styles.quoteStatusText}>
-                {quoteLoading ? 'Updating store prices...' : 'Using local estimate for now.'}
-              </Text>
-            </View>
-          )}
-
-          <View style={styles.storeComparisonCard}>
-            <Text style={styles.storeComparisonTitle}>Supermarket comparison</Text>
-            {stores.map(store => {
-              const modifier = storePriceModifiers[store.id] ?? 1;
-              const storeTotal = groceryTotal * modifier;
-              const quote = hasQuoteData ? quoteByStore.get(store.id) : null;
-              return (
-                <TouchableOpacity
-                  key={store.id}
+              <View style={styles.groceryStatsRow}>
+                <View style={styles.groceryStat}>
+                  <Text style={styles.groceryStatValue}>{state.groceryList.length}</Text>
+                  <Text style={styles.groceryStatLabel}>Ingredients</Text>
+                </View>
+                <View style={styles.groceryStat}>
+                  <Text style={styles.groceryStatValue}>{checkedCount}</Text>
+                  <Text style={styles.groceryStatLabel}>In basket</Text>
+                </View>
+                <View style={styles.groceryStat}>
+                  <Text style={styles.groceryStatValue}>£{overlapSavings.toFixed(2)}</Text>
+                  <Text style={styles.groceryStatLabel}>Overlap savings</Text>
+                </View>
+              </View>
+              <View style={styles.grocerySummaryRow}>
+                <Text style={styles.grocerySummaryRowLabel}>Pack size optimization</Text>
+                <Text style={styles.grocerySummaryRowValue}>
+                  {packOptimizationDelta >= 0 ? '+' : '-'}£{Math.abs(packOptimizationDelta).toFixed(2)}
+                </Text>
+              </View>
+              {/* Progress bar */}
+              <View style={styles.progressBar}>
+                <View
                   style={[
-                    styles.storeComparisonRow,
-                    { borderColor: store.primaryColor },
+                    styles.progressFill,
+                    { width: `${(checkedCount / state.groceryList.length) * 100}%` },
                   ]}
-                  onPress={() => setSelectedStoreId(store.id)}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.storeComparisonInfo}>
-                    <Text style={styles.storeComparisonName}>{store.name}</Text>
-                    {quote?.missingCount ? (
-                      <View style={styles.missingBadge}>
-                        <Text style={styles.missingBadgeText}>
-                          Missing {quote.missingCount}
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  <View style={styles.storeComparisonTotals}>
-                    {quote ? (
-                      <>
-                        <Text style={styles.storeComparisonTotal}>
-                          £{quote.basketTotal.toFixed(2)} est
-                        </Text>
-                        <Text style={styles.storeComparisonSubTotal}>
-                          £{quote.consumedEstimate.toFixed(2)} consumed
-                        </Text>
-                        <Text style={styles.storeComparisonMeta}>
-                          Updated {new Date(quote.lastUpdated).toLocaleString()}
-                        </Text>
-                      </>
-                    ) : (
-                      <>
-                        <Text style={styles.storeComparisonTotal}>
-                          £{(storeTotal * 0.95).toFixed(2)} - £{(storeTotal * 1.05).toFixed(2)}
-                        </Text>
-                        <Text style={styles.storeComparisonMeta}>Local estimate</Text>
-                      </>
-                    )}
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+                />
+              </View>
+            </LinearGradient>
 
-          {selectedQuote && (
-            <View style={styles.storeDetailCard}>
-              <Text style={styles.storeDetailTitle}>
-                {stores.find(store => store.id === selectedQuote.store)?.name ?? selectedQuote.store} details
-              </Text>
-              <Text style={styles.storeDetailSubtitle}>Line items (estimate)</Text>
-              {sortedLineItems.map(item => (
-                <View key={item.storeProductId} style={styles.lineItemRow}>
-                  <View style={styles.lineItemInfo}>
-                    <Text style={styles.lineItemTitle} numberOfLines={1}>{item.productTitle}</Text>
-                    <Text style={styles.lineItemMeta}>
-                      {item.packsNeeded} x {item.packSize.value} {item.packSize.unit}
-                    </Text>
-                  </View>
-                  <Text style={styles.lineItemTotal}>£{item.lineTotal.toFixed(2)}</Text>
-                </View>
-              ))}
-              {selectedQuote.missingItems.length > 0 && (
-                <View style={styles.missingList}>
-                  <Text style={styles.missingListTitle}>Missing items</Text>
-                  {selectedQuote.missingItems.map((missing, index) => (
-                    <Text key={`${missing.ingredientName}-${index}`} style={styles.missingListItem}>
-                      {missing.ingredientName} ({missing.reason})
-                    </Text>
-                  ))}
-                </View>
-              )}
+            {anyMissingItems && (
+              <View style={styles.missingBanner}>
+                <Ionicons name="alert-circle" size={16} color={Colors.warning} />
+                <Text style={styles.missingBannerText}>
+                  Some items could not be priced yet. Totals are estimates.
+                </Text>
+              </View>
+            )}
+
+            {(quoteLoading || quoteError) && (
+              <View style={styles.quoteStatusRow}>
+                <Text style={styles.quoteStatusText}>
+                  {quoteLoading ? 'Updating store prices...' : 'Using local estimate for now.'}
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.storeComparisonCard}>
+              <Text style={styles.storeComparisonTitle}>Supermarket comparison</Text>
+              {stores.map(store => {
+                const modifier = storePriceModifiers[store.id] ?? 1;
+                const storeTotal = groceryTotal * modifier;
+                const quote = hasQuoteData ? quoteByStore.get(store.id) : null;
+                return (
+                  <TouchableOpacity
+                    key={store.id}
+                    style={[
+                      styles.storeComparisonRow,
+                      { borderColor: store.primaryColor },
+                    ]}
+                    onPress={() => setSelectedStoreId(store.id)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.storeComparisonInfo}>
+                      <Text style={styles.storeComparisonName}>{store.name}</Text>
+                      {quote?.missingCount ? (
+                        <View style={styles.missingBadge}>
+                          <Text style={styles.missingBadgeText}>
+                            Missing {quote.missingCount}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    <View style={styles.storeComparisonTotals}>
+                      {quote ? (
+                        <>
+                          <Text style={styles.storeComparisonTotal}>
+                            £{quote.basketTotal.toFixed(2)} est
+                          </Text>
+                          <Text style={styles.storeComparisonSubTotal}>
+                            £{quote.consumedEstimate.toFixed(2)} consumed
+                          </Text>
+                          <Text style={styles.storeComparisonMeta}>
+                            Updated {new Date(quote.lastUpdated).toLocaleString()}
+                          </Text>
+                        </>
+                      ) : (
+                        <>
+                          <Text style={styles.storeComparisonTotal}>
+                            £{(storeTotal * 0.95).toFixed(2)} - £{(storeTotal * 1.05).toFixed(2)}
+                          </Text>
+                          <Text style={styles.storeComparisonMeta}>Local estimate</Text>
+                        </>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
-          )}
 
-          {/* Basket Items */}
-          <ScrollView style={styles.groceryScroll} showsVerticalScrollIndicator={false}>
-            {Object.entries(groupedGroceries).map(([category, items]) => (
-              <View key={category} style={styles.groceryCategory}>
-                <View style={styles.groceryCategoryHeader}>
-                  <Text style={styles.groceryCategoryIcon}>
-                    {CategoryIcons[category] || '📦'}
-                  </Text>
-                  <Text style={styles.groceryCategoryTitle}>{category}</Text>
-                  <View style={styles.groceryCategoryBadge}>
-                    <Text style={styles.groceryCategoryCount}>{items.length}</Text>
+            {selectedQuote && (
+              <View style={styles.storeDetailCard}>
+                <Text style={styles.storeDetailTitle}>
+                  {stores.find(store => store.id === selectedQuote.store)?.name ?? selectedQuote.store} details
+                </Text>
+                <Text style={styles.storeDetailSubtitle}>Line items (estimate)</Text>
+                {sortedLineItems.map(item => (
+                  <View key={item.storeProductId} style={styles.lineItemRow}>
+                    <View style={styles.lineItemInfo}>
+                      <Text style={styles.lineItemTitle} numberOfLines={1}>{item.productTitle}</Text>
+                      <Text style={styles.lineItemMeta}>
+                        {item.packsNeeded} x {item.packSize.value} {item.packSize.unit}
+                      </Text>
+                    </View>
+                    <Text style={styles.lineItemTotal}>£{item.lineTotal.toFixed(2)}</Text>
                   </View>
-                </View>
+                ))}
+                {selectedQuote.missingItems.length > 0 && (
+                  <View style={styles.missingList}>
+                    <Text style={styles.missingListTitle}>Missing items</Text>
+                    {selectedQuote.missingItems.map((missing, index) => (
+                      <Text key={`${missing.ingredientName}-${index}`} style={styles.missingListItem}>
+                        {missing.ingredientName} ({missing.reason})
+                      </Text>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
 
-                <View style={styles.groceryItemsContainer}>
-                  {items.map((item, index) => (
-                    <TouchableOpacity
-                      key={item.id}
-                      style={[
-                        styles.groceryItem,
-                        index < items.length - 1 && styles.groceryItemBorder,
-                      ]}
-                      onPress={() => handleToggleGroceryItem(item.id)}
-                      activeOpacity={0.7}
-                    >
-                      <View
+            {/* Basket Items */}
+            <View style={styles.groceryList}>
+              {Object.entries(groupedGroceries).map(([category, items]) => (
+                <View key={category} style={styles.groceryCategory}>
+                  <View style={styles.groceryCategoryHeader}>
+                    <Text style={styles.groceryCategoryIcon}>
+                      {CategoryIcons[category] || '📦'}
+                    </Text>
+                    <Text style={styles.groceryCategoryTitle}>{category}</Text>
+                    <View style={styles.groceryCategoryBadge}>
+                      <Text style={styles.groceryCategoryCount}>{items.length}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.groceryItemsContainer}>
+                    {items.map((item, index) => (
+                      <TouchableOpacity
+                        key={item.id}
                         style={[
-                          styles.checkbox,
-                          item.isChecked && styles.checkboxChecked,
+                          styles.groceryItem,
+                          index < items.length - 1 && styles.groceryItemBorder,
                         ]}
+                        onPress={() => handleToggleGroceryItem(item.id)}
+                        activeOpacity={0.7}
                       >
-                        {item.isChecked && (
-                          <Ionicons name="checkmark" size={14} color={Colors.white} />
-                        )}
-                      </View>
-
-                      <View style={styles.groceryItemInfo}>
-                        <Text
+                        <View
                           style={[
-                            styles.groceryItemName,
-                            item.isChecked && styles.groceryItemNameChecked,
+                            styles.checkbox,
+                            item.isChecked && styles.checkboxChecked,
                           ]}
                         >
-                          {item.ingredientName}
-                          {item.isShared && (
-                            <Text style={styles.sharedBadge}> SHARED</Text>
+                          {item.isChecked && (
+                            <Ionicons name="checkmark" size={14} color={Colors.white} />
                           )}
-                        </Text>
-                        <Text style={styles.groceryItemQty}>
-                          {formatQuantity(item.quantity)} {item.unit}
-                        </Text>
-                      </View>
+                        </View>
 
-                      <Text style={styles.groceryItemPrice}>
-                        £{item.estimatedPrice.toFixed(2)}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                        <View style={styles.groceryItemInfo}>
+                          <Text
+                            style={[
+                              styles.groceryItemName,
+                              item.isChecked && styles.groceryItemNameChecked,
+                            ]}
+                          >
+                            {item.ingredientName}
+                            {item.isShared && (
+                              <Text style={styles.sharedBadge}> SHARED</Text>
+                            )}
+                          </Text>
+                          <Text style={styles.groceryItemQty}>
+                            {formatQuantity(item.quantity)} {item.unit}
+                          </Text>
+                        </View>
+
+                        <Text style={styles.groceryItemPrice}>
+                          £{item.estimatedPrice.toFixed(2)}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
-              </View>
-            ))}
+              ))}
+            </View>
           </ScrollView>
 
           {/* Shop Button */}
@@ -696,9 +703,8 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: Colors.success,
   },
-  groceryScroll: {
+  modalScroll: {
     flex: 1,
-    paddingHorizontal: Spacing.lg,
   },
   storeComparisonCard: {
     marginHorizontal: Spacing.lg,
@@ -878,6 +884,9 @@ const styles = StyleSheet.create({
   groceryCategoryCount: {
     fontSize: 12,
     color: Colors.textSecondary,
+  },
+  groceryList: {
+    paddingHorizontal: Spacing.lg,
   },
   groceryItemsContainer: {
     backgroundColor: Colors.backgroundSecondary,
