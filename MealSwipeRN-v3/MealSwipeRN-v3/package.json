@@ -32,6 +32,7 @@
   "devDependencies": {
     "@babel/core": "^7.26.0",
     "@types/react": "~19.1.10",
+    "playwright": "^1.57.0",
     "typescript": "~5.9.2"
   },
   "private": true

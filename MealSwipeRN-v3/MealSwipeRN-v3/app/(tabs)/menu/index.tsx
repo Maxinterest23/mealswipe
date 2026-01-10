@@ -22,7 +22,10 @@ const GRADIENT_COLORS: Record<string, [string, string]> = {
   '#A78BFA': ['#A78BFA', '#8b5cf6'],
 };
 
-function getGradientColors(gradient: string): [string, string] {
+function getGradientColors(gradient?: string | null): [string, string] {
+  if (!gradient) {
+    return ['#FF6B35', '#ff8a5c'];
+  }
   const match = gradient.match(/#[A-Fa-f0-9]{6}/);
   if (match && GRADIENT_COLORS[match[0]]) {
     return GRADIENT_COLORS[match[0]];

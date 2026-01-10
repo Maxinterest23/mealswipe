@@ -7,7 +7,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const TTL_HOURS = 12;
+const TTL_HOURS = 24;
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 const REQUEST_DELAY_MS = 150;
@@ -61,7 +61,7 @@ function normalizeProviderId(value: string) {
 }
 
 function parseBatchSize() {
-  const raw = Deno.env.get('PROVIDER_BATCH_SIZE');
+  const raw = Deno.env.get('SCRAPER_BATCH_SIZE') ?? Deno.env.get('PROVIDER_BATCH_SIZE');
   if (!raw) return DEFAULT_BATCH_SIZE;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_BATCH_SIZE;

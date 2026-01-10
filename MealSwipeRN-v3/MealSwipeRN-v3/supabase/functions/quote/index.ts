@@ -7,7 +7,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const TTL_HOURS = 12;
+const TTL_HOURS = 24;
 
 interface QuoteRequestItem {
   ingredientName: string;

@@ -7,6 +7,7 @@ interface StoreProductRow {
   id: string;
   store: string;
   provider_product_id: string;
+  product_url: string | null;
   title: string;
   pack_size_value: number;
   pack_size_unit: UnitType;
@@ -34,6 +35,16 @@ interface ProviderPrice {
   fetchedAt?: string | null;
 }
 
+const DEFAULT_TIMEOUT_MS = 30000;
+const DEFAULT_RETRIES = 2;
+const DEFAULT_CURRENCY = 'GBP';
+const DEFAULT_USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36';
+const TTL_HOURS = 24;
+const REQUEST_DELAY_MS = 150;
+
+type UnknownRecord = Record<string, unknown>;
+
 function loadDotEnv() {
   const envPath = path.join(process.cwd(), '.env');
   if (!fs.existsSync(envPath)) return;
@@ -59,6 +70,58 @@ function loadDotEnv() {
   }
 }
 
+async function sleep(ms: number) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWithRetry(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  retries = DEFAULT_RETRIES,
+  timeoutMs = DEFAULT_TIMEOUT_MS
+) {
+  let attempt = 0;
+  let lastError: Error | null = null;
+
+  while (attempt <= retries) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      const response = await fetch(input, { ...init, signal: controller.signal });
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Scrape request failed (${response.status}): ${text}`);
+      }
+
+      return response;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('Unknown scrape error');
+      if (attempt >= retries) break;
+      await sleep(300 * (attempt + 1));
+      attempt += 1;
+    }
+  }
+
+  throw lastError ?? new Error('Scrape request failed');
+}
+
+function buildScrapeHeaders() {
+  const userAgent = process.env.SCRAPER_USER_AGENT ?? DEFAULT_USER_AGENT;
+  return {
+    'User-Agent': userAgent,
+    Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'en-GB,en;q=0.9',
+    'Cache-Control': 'no-cache',
+  };
+}
+
+function asRecord(value: unknown): UnknownRecord | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as UnknownRecord;
+}
+
 function parseNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string') {
@@ -73,40 +136,33 @@ function parseNumber(value: unknown): number | null {
 function normalizeCurrency(value: unknown): string {
   if (typeof value === 'string') {
     const trimmed = value.trim();
-    if (!trimmed) return 'GBP';
+    if (!trimmed) return DEFAULT_CURRENCY;
     const upper = trimmed.toUpperCase();
     if (upper === '£' || upper === 'GBP' || upper === 'GBX') return 'GBP';
     if (upper === '$' || upper === 'USD') return 'USD';
     if (upper === '€' || upper === 'EUR') return 'EUR';
     if (/^[A-Z]{3}$/.test(upper)) return upper;
   }
-  return 'GBP';
+  return DEFAULT_CURRENCY;
 }
 
-function extractOffer(item: Record<string, unknown>): Record<string, unknown> | null {
+function extractOffer(item: UnknownRecord): UnknownRecord | null {
   const offers = item.offers;
   if (Array.isArray(offers)) {
     for (const offer of offers) {
-      if (offer && typeof offer === 'object' && !Array.isArray(offer)) {
-        return offer as Record<string, unknown>;
-      }
+      const record = asRecord(offer);
+      if (record) return record;
     }
     return null;
   }
-  if (offers && typeof offers === 'object' && !Array.isArray(offers)) {
-    return offers as Record<string, unknown>;
-  }
-  return null;
+  return asRecord(offers);
 }
 
-function getOfferValue(offer: Record<string, unknown> | null, key: string): unknown {
+function getOfferValue(offer: UnknownRecord | null, key: string): unknown {
   if (!offer) return undefined;
   if (key in offer) return offer[key];
-  const priceSpec = offer.priceSpecification;
-  if (priceSpec && typeof priceSpec === 'object' && !Array.isArray(priceSpec)) {
-    return (priceSpec as Record<string, unknown>)[key];
-  }
-  return undefined;
+  const priceSpec = asRecord(offer.priceSpecification);
+  return priceSpec?.[key];
 }
 
 function parseInStock(value: unknown): boolean | null {
@@ -119,64 +175,30 @@ function parseInStock(value: unknown): boolean | null {
   return null;
 }
 
-function extractAdditionalProperties(item: Record<string, unknown>): Record<string, unknown> | null {
-  const additional = item.additionalProperties;
-  if (additional && typeof additional === 'object' && !Array.isArray(additional)) {
-    return additional as Record<string, unknown>;
-  }
-  return null;
-}
-
-function parseProviderPrice(item: Record<string, unknown>): ProviderPrice | null {
+function parseProviderPrice(item: UnknownRecord): ProviderPrice {
   const offer = extractOffer(item);
-  const additional = extractAdditionalProperties(item);
   const price = parseNumber(
     getOfferValue(offer, 'price') ??
       getOfferValue(offer, 'lowPrice') ??
       getOfferValue(offer, 'highPrice') ??
       item.price ??
       item.currentPrice ??
-      item.offerPrice ??
-      additional?.price ??
-      additional?.currentPrice ??
-      additional?.regularPrice ??
-      additional?.offerPrice ??
-      additional?.clubcardPrice ??
-      additional?.priceWithTax ??
-      additional?.priceWithVat
+      item.offerPrice
   );
   const currency = normalizeCurrency(
-    getOfferValue(offer, 'priceCurrency') ??
-      item.priceCurrency ??
-      item.currency ??
-      additional?.priceCurrency ??
-      additional?.currencyRaw
+    getOfferValue(offer, 'priceCurrency') ?? item.priceCurrency ?? item.currency
   );
-  const unitPrice = parseNumber(
-    getOfferValue(offer, 'unitPrice') ??
-      item.unitPrice ??
-      additional?.unitPrice ??
-      additional?.pricePerUnit
-  );
+  const unitPrice = parseNumber(getOfferValue(offer, 'unitPrice') ?? item.unitPrice);
   const promoText =
     typeof item.promoText === 'string'
       ? item.promoText
-      : typeof additional?.promoText === 'string'
-        ? additional.promoText
-        : typeof additional?.offerText === 'string'
-          ? additional.offerText
       : typeof item.description === 'string'
         ? item.description
         : null;
-  const inStock = parseInStock(
-    item.inStock ??
-      getOfferValue(offer, 'availability') ??
-      additional?.inStock ??
-      additional?.availability
-  );
+  const inStock = parseInStock(item.inStock ?? getOfferValue(offer, 'availability'));
 
   if (price === null) {
-    return null;
+    throw new Error('Provider response missing price data.');
   }
 
   return {
@@ -189,13 +211,165 @@ function parseProviderPrice(item: Record<string, unknown>): ProviderPrice | null
   };
 }
 
-function extractItemUrl(item: Record<string, unknown>): string | null {
-  const url = item.url ?? item.pageUrl ?? item.productUrl ?? item.detailUrl;
-  return typeof url === 'string' ? url : null;
+function extractJsonLdBlocks(html: string) {
+  const blocks: string[] = [];
+  const regex = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(html)) !== null) {
+    if (match[1]) blocks.push(match[1]);
+  }
+  return blocks;
+}
+
+function normalizeJsonLdValue(value: unknown): UnknownRecord[] {
+  if (Array.isArray(value)) {
+    return value.map(asRecord).filter(Boolean) as UnknownRecord[];
+  }
+  const record = asRecord(value);
+  return record ? [record] : [];
+}
+
+function extractJsonLd(html: string): UnknownRecord[] {
+  const blocks = extractJsonLdBlocks(html);
+  const items: UnknownRecord[] = [];
+  for (const block of blocks) {
+    const trimmed = block.trim();
+    if (!trimmed) continue;
+    try {
+      const parsed = JSON.parse(trimmed);
+      items.push(...normalizeJsonLdValue(parsed));
+    } catch (error) {
+      console.error('JSON-LD parse failed:', error);
+    }
+  }
+  return items;
+}
+
+function extractNextData(html: string): UnknownRecord | null {
+  const match = html.match(/<script[^>]*id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i);
+  if (!match || !match[1]) return null;
+  try {
+    const parsed = JSON.parse(match[1]);
+    return asRecord(parsed);
+  } catch (error) {
+    console.error('Next data parse failed:', error);
+    return null;
+  }
+}
+
+function isProductType(typeValue: unknown) {
+  if (typeof typeValue === 'string') {
+    return typeValue.toLowerCase().includes('product');
+  }
+  if (Array.isArray(typeValue)) {
+    return typeValue.some(
+      (entry) => typeof entry === 'string' && entry.toLowerCase().includes('product')
+    );
+  }
+  return false;
+}
+
+function findProductNode(value: unknown): UnknownRecord | null {
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const found = findProductNode(entry);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  const record = asRecord(value);
+  if (!record) return null;
+
+  if (isProductType(record['@type'])) return record;
+
+  if (record['@graph']) {
+    const found = findProductNode(record['@graph']);
+    if (found) return found;
+  }
+
+  for (const key of Object.keys(record)) {
+    const found = findProductNode(record[key]);
+    if (found) return found;
+  }
+
+  return null;
+}
+
+function findOfferNode(value: unknown): UnknownRecord | null {
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const found = findOfferNode(entry);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  const record = asRecord(value);
+  if (!record) return null;
+
+  if (record.offers || record.price) return record;
+
+  for (const key of Object.keys(record)) {
+    const found = findOfferNode(record[key]);
+    if (found) return found;
+  }
+
+  return null;
+}
+
+function findProductData(html: string): UnknownRecord | null {
+  const jsonLdItems = extractJsonLd(html);
+  for (const entry of jsonLdItems) {
+    const product = findProductNode(entry);
+    if (product) return product;
+    const offer = findOfferNode(entry);
+    if (offer) return offer;
+  }
+
+  const nextData = extractNextData(html);
+  if (nextData) {
+    const product = findProductNode(nextData) ?? findOfferNode(nextData);
+    if (product) return product;
+  }
+
+  return null;
+}
+
+async function scrapeProductPrice(url: string, timeoutMs: number): Promise<ProviderPrice | null> {
+  try {
+    const response = await fetchWithRetry(url, { method: 'GET', headers: buildScrapeHeaders() }, DEFAULT_RETRIES, timeoutMs);
+    const html = await response.text();
+    const product = findProductData(html);
+    if (!product) {
+      return null;
+    }
+    return parseProviderPrice(product);
+  } catch (error) {
+    console.error(`Scrape failed for ${url}:`, error);
+    return null;
+  }
+}
+
+function resolveProductUrl(product: StoreProductRow) {
+  const providerUrl = product.provider_product_id?.trim();
+  if (providerUrl && !providerUrl.startsWith('TODO_') && isHttpUrl(providerUrl)) return providerUrl;
+  const productUrl = product.product_url?.trim();
+  if (productUrl && !productUrl.startsWith('TODO_') && isHttpUrl(productUrl)) return productUrl;
+  return null;
 }
 
 function normalizeProviderId(value: string) {
   return value.trim();
+}
+
+function isHttpUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 function chunk<T>(items: T[], size: number) {
@@ -206,58 +380,6 @@ function chunk<T>(items: T[], size: number) {
   return chunks;
 }
 
-function buildUpserts(
-  products: StoreProductRow[],
-  items: Record<string, unknown>[],
-  nowMs: number,
-  cachePostcode: string
-) {
-  const priceByUrl = new Map<string, ProviderPrice>();
-  const missingSamples: string[] = [];
-  for (const entry of items) {
-    const url = extractItemUrl(entry);
-    if (!url) continue;
-    const price = parseProviderPrice(entry);
-    if (!price) {
-      if (missingSamples.length < 5) {
-        missingSamples.push(url);
-      }
-      continue;
-    }
-    priceByUrl.set(normalizeProviderId(url), price);
-  }
-
-  const upserts: PriceCacheRow[] = [];
-  let missing = 0;
-
-  for (const product of products) {
-    const price = priceByUrl.get(normalizeProviderId(product.provider_product_id));
-    if (!price) {
-      missing += 1;
-      continue;
-    }
-    const ttlExpiresAt = new Date(nowMs + 12 * 60 * 60 * 1000).toISOString();
-    const fetchedAt = price.fetchedAt ?? new Date(nowMs).toISOString();
-    upserts.push({
-      store_product_id: product.id,
-      postcode_area: cachePostcode,
-      price: price.price,
-      unit_price: price.unitPrice ?? null,
-      promo_text: price.promoText ?? null,
-      in_stock: price.inStock ?? null,
-      currency: price.currency,
-      fetched_at: fetchedAt,
-      ttl_expires_at: ttlExpiresAt,
-    });
-  }
-
-  if (missingSamples.length) {
-    console.log(`Missing price samples: ${missingSamples.join(', ')}`);
-  }
-
-  return { upserts, missing };
-}
-
 async function fetchStoreProducts(
   supabaseUrl: string,
   apiKey: string,
@@ -265,7 +387,10 @@ async function fetchStoreProducts(
   limit: number
 ) {
   const url = new URL(`${supabaseUrl}/rest/v1/store_products`);
-  url.searchParams.set('select', 'id,store,provider_product_id,title,pack_size_value,pack_size_unit,active');
+  url.searchParams.set(
+    'select',
+    'id,store,provider_product_id,product_url,title,pack_size_value,pack_size_unit,active'
+  );
   url.searchParams.set('active', 'eq.true');
   if (stores.length) {
     url.searchParams.set('store', `in.(${stores.map((store) => `"${store}"`).join(',')})`);
@@ -345,64 +470,13 @@ async function upsertPriceCache(
   }
 }
 
-async function runApifyActor(
-  baseUrl: string,
-  apiKey: string,
-  actorId: string,
-  store: string,
-  urls: string[],
-  timeoutMs: number,
-  includeExtra: boolean,
-  includeStore: boolean
-) {
-  const normalizedActorId = actorId.includes('/') ? actorId.replace(/\//g, '~') : actorId;
-  const endpoint = `${baseUrl.replace(/\/$/, '')}/acts/${normalizedActorId}/run-sync-get-dataset-items`;
-  const url = new URL(endpoint);
-  url.searchParams.set('clean', 'true');
-  url.searchParams.set('format', 'json');
-  url.searchParams.set('limit', String(urls.length));
-  url.searchParams.set('timeout', String(Math.ceil(timeoutMs / 1000)));
-
-  const input: Record<string, unknown> = {
-    detailsUrls: urls.map((detailUrl) => ({ url: detailUrl })),
-    scrapeInfluencerProducts: false,
-  };
-
-  if (includeStore) {
-    input.store = store;
-  }
-
-  if (includeExtra) {
-    input.additionalProperties = true;
-    input.additionalReviewProperties = true;
-  }
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(input),
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Apify request failed (${response.status}): ${text}`);
-  }
-
-  return (await response.json()) as Record<string, unknown>[];
-}
-
 function parseArgs() {
   const args = process.argv.slice(2);
   const stores: string[] = [];
-  let limit = 50;
+  let limit = 200;
   let force = false;
-  let batchSize = 3;
-  let includeExtra = false;
-  let includeStore = false;
-  let timeoutMs = 60000;
+  let batchSize = Number(process.env.SCRAPER_BATCH_SIZE) || 4;
+  let timeoutMs = Number(process.env.SCRAPER_TIMEOUT_MS ?? process.env.PROVIDER_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS;
 
   args.forEach((arg) => {
     if (arg.startsWith('--stores=')) {
@@ -416,14 +490,10 @@ function parseArgs() {
       batchSize = Number(arg.split('=')[1]);
     } else if (arg.startsWith('--timeout=')) {
       timeoutMs = Number(arg.split('=')[1]);
-    } else if (arg === '--include-extra') {
-      includeExtra = true;
-    } else if (arg === '--include-store') {
-      includeStore = true;
     }
   });
 
-  return { stores, limit, force, batchSize, includeExtra, includeStore, timeoutMs };
+  return { stores, limit, force, batchSize, timeoutMs };
 }
 
 async function main() {
@@ -431,20 +501,13 @@ async function main() {
 
   const supabaseUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const providerBaseUrl = process.env.PROVIDER_BASE_URL;
-  const providerApiKey = process.env.PROVIDER_API_KEY;
-  const providerActorId = process.env.PROVIDER_ACTOR_ID;
 
   if (!supabaseUrl || !supabaseKey) {
     console.error('Missing SUPABASE_URL/EXPO_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.');
     process.exit(1);
   }
-  if (!providerBaseUrl || !providerApiKey || !providerActorId) {
-    console.error('Missing PROVIDER_BASE_URL, PROVIDER_API_KEY, or PROVIDER_ACTOR_ID.');
-    process.exit(1);
-  }
 
-  const { stores, limit, force, batchSize, includeExtra, includeStore, timeoutMs } = parseArgs();
+  const { stores, limit, force, batchSize, timeoutMs } = parseArgs();
 
   const storeProducts = await fetchStoreProducts(supabaseUrl, supabaseKey, stores, limit);
   if (!storeProducts.length) {
@@ -470,11 +533,14 @@ async function main() {
       skipped.push(product);
       continue;
     }
-    if (!product.provider_product_id || product.provider_product_id.startsWith('TODO_')) {
+
+    const url = resolveProductUrl(product);
+    if (!url) {
       continue;
     }
+
     const list = refreshByStore.get(product.store) ?? [];
-    list.push(product);
+    list.push({ ...product, provider_product_id: normalizeProviderId(url) });
     refreshByStore.set(product.store, list);
   }
 
@@ -484,47 +550,45 @@ async function main() {
   for (const [store, products] of refreshByStore.entries()) {
     const batches = chunk(products, batchSize);
     for (const batch of batches) {
-      const urls = batch.map((product) => normalizeProviderId(product.provider_product_id));
-      console.log(`Refreshing ${store}: ${batch.length} urls`);
-      try {
-        const items = await runApifyActor(
-          providerBaseUrl,
-          providerApiKey,
-          providerActorId,
-          store,
-          urls,
-          timeoutMs,
-          includeExtra,
-          includeStore
-        );
+      console.log(`Scraping ${store}: ${batch.length} products`);
 
-        const { upserts, missing } = buildUpserts(batch, items, nowMs, cachePostcode);
+      const results = await Promise.all(
+        batch.map(async (product) => {
+          const url = normalizeProviderId(product.provider_product_id);
+          const price = await scrapeProductPrice(url, timeoutMs);
+          if (!price) return null;
+
+          const packSize = Number(product.pack_size_value);
+          const unitPrice =
+            price.unitPrice ?? (packSize > 0 ? Number(price.price) / packSize : null);
+          const ttlExpiresAt = new Date(nowMs + TTL_HOURS * 60 * 60 * 1000).toISOString();
+          const fetchedAt = price.fetchedAt ?? new Date(nowMs).toISOString();
+
+          return {
+            store_product_id: product.id,
+            postcode_area: cachePostcode,
+            price: price.price,
+            unit_price: unitPrice,
+            promo_text: price.promoText ?? null,
+            in_stock: price.inStock ?? null,
+            currency: price.currency,
+            fetched_at: fetchedAt,
+            ttl_expires_at: ttlExpiresAt,
+          } satisfies PriceCacheRow;
+        })
+      );
+
+      const upserts = results.filter(Boolean) as PriceCacheRow[];
+      const missing = results.length - upserts.length;
+      if (upserts.length) {
         await upsertPriceCache(supabaseUrl, supabaseKey, upserts);
-        refreshed += upserts.length;
-        failed += missing;
-      } catch (error) {
-        console.error('Batch failed, falling back to single URLs:', error);
-        for (const product of batch) {
-          try {
-            const singleItems = await runApifyActor(
-              providerBaseUrl,
-              providerApiKey,
-              providerActorId,
-              store,
-              [normalizeProviderId(product.provider_product_id)],
-              timeoutMs,
-              includeExtra,
-              includeStore
-            );
-            const { upserts, missing } = buildUpserts([product], singleItems, nowMs, cachePostcode);
-            await upsertPriceCache(supabaseUrl, supabaseKey, upserts);
-            refreshed += upserts.length;
-            failed += missing;
-          } catch (singleError) {
-            console.error(`Single URL failed for ${product.title}:`, singleError);
-            failed += 1;
-          }
-        }
+      }
+
+      refreshed += upserts.length;
+      failed += missing;
+
+      if (REQUEST_DELAY_MS > 0) {
+        await sleep(REQUEST_DELAY_MS);
       }
     }
   }

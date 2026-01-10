@@ -61,9 +61,11 @@ node scripts/seedCanonicalItems.ts
 node scripts/seedStoreMappings.ts
 ```
 
-Provider wiring (server-only):
-- Set `PROVIDER_BASE_URL` and `PROVIDER_API_KEY` for the Edge Function.
-- Replace placeholder `provider_product_id` values in `store_products`.
+Scraper wiring (server-only):
+- Optional: set `SCRAPER_TIMEOUT_MS` and `SCRAPER_USER_AGENT`.
+- Replace placeholder `provider_product_id` values in `store_products` with Tesco/Morrisons product URLs.
+
+If Tesco/Morrisons blocks plain fetch, use the Playwright flow in `docs/price-comparison.md`.
 
 ## Content Pipeline TODO
 
